@@ -1,0 +1,36 @@
+name: Probe Linux Mint source download
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/probe-mint-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  download-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Install Debian source tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends devscripts dpkg-dev
+
+      - name: Download and verify Linux Mint source package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mint-source
+          cd /tmp/mint-source
+          url='https://fastly.linuxmint.io/pool/upstream/g/gnome-calendar/gnome-calendar_46.1-1mint2+zara.dsc'
+          echo "Fetching source descriptor: ${url}"
+          # -u skips OpenPGP signature verification; dget still verifies
+          # downloaded source archives against checksums in the .dsc.
+          dget --extract --allow-unauthenticated "${url}"
+          echo 'Downloaded source files:'
+          ls -lh
+          echo 'Source metadata:'
+          dpkg-source --print-format gnome-calendar_46.1-1mint2+zara.dsc
