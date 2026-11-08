@@ -1,0 +1,61 @@
+name: Build gnome-calendar DEB
+
+on:
+  pull_request:
+    paths:
+      - packages/gnome-calendar/**
+      - .github/workflows/build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Debian packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential devscripts equivs dpkg-dev patch
+      - name: Fetch and patch Linux Mint source
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="$GITHUB_WORKSPACE/packages/gnome-calendar"
+          mkdir -p "$RUNNER_TEMP/source"
+          cd "$RUNNER_TEMP/source"
+          dget -u -x 'https://fastly.linuxmint.io/pool/upstream/g/gnome-calendar/gnome-calendar_46.1-1mint2+zara.dsc'
+          cd gnome-calendar-46.1
+          while IFS= read -r name; do
+            [[ -n "$name" && "$name" != \#* ]] || continue
+            patch --batch --forward --fuzz=0 -p1 < "$package_dir/patches/$name"
+          done < "$package_dir/patches/series"
+          dch --local '+my' --distribution zara --force-distribution \
+            'Apply locally maintained gnome-calendar fixes.'
+          echo "SOURCE_DIR=$PWD" >> "$GITHUB_ENV"
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          sudo mk-build-deps --install --remove \
+            --tool 'apt-get -y --no-install-recommends' debian/control
+      - name: Build Debian binary packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          dpkg-buildpackage --build=binary --no-sign
+          mkdir -p "$RUNNER_TEMP/debs"
+          find .. -maxdepth 1 -type f -name '*.deb' -exec cp -v {} "$RUNNER_TEMP/debs/" \;
+          test -n "$(find "$RUNNER_TEMP/debs" -maxdepth 1 -name '*.deb' -print -quit)"
+      - name: Upload DEB artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnome-calendar-debs
+          path: ${{ runner.temp }}/debs/*.deb
+          if-no-files-found: error
