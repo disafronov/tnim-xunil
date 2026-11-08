@@ -33,4 +33,4 @@ jobs:
           echo 'Downloaded source files:'
           ls -lh
           echo 'Source metadata:'
-          dpkg-source --print-format gnome-calendar_46.1-1mint2+zara.dsc
+          dpkg-source --print-format gnome-calendar-46.1
