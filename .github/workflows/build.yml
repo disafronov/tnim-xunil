@@ -1,10 +1,10 @@
-name: Build gnome-calendar DEB
+name: Build Debian packages
 
 on:
   pull_request:
     paths:
-      - packages/gnome-calendar/**
-      - scripts/build_package.py
+      - packages/**
+      - scripts/**
       - .github/workflows/build.yml
   workflow_dispatch:
 
@@ -12,7 +12,42 @@ permissions:
   contents: read
 
 jobs:
+  detect:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.packages.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Detect changed packages
+        id: packages
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            find packages -mindepth 2 -maxdepth 2 -name package.yaml -printf '%h\n' |
+              sed 's@^packages/@@' |
+              awk '{print "packages/" $0 "/package.yaml"}' > "$RUNNER_TEMP/changed-files"
+            # A shared-script change deliberately selects every package.
+            printf '%s\n' scripts/build_package.py >> "$RUNNER_TEMP/changed-files"
+          else
+            git diff --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-files"
+          fi
+          matrix="$(python3 scripts/detect_changes.py --changed-files "$RUNNER_TEMP/changed-files")"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Selected packages: $matrix"
+
   build:
+    needs: detect
+    if: ${{ needs.detect.outputs.matrix != '{"package":[]}' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -25,10 +60,10 @@ jobs:
       - name: Build package from manifest
         run: |
           /usr/bin/python3 scripts/build_package.py \
-            packages/gnome-calendar "$RUNNER_TEMP/debs"
+            "packages/${{ matrix.package }}" "$RUNNER_TEMP/debs"
       - name: Upload DEB artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: gnome-calendar-debs
+          name: ${{ matrix.package }}-debs
           path: ${{ runner.temp }}/debs/*.deb
           if-no-files-found: error
