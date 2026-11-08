@@ -37,12 +37,12 @@ scripts/
     assign-pr.yml
 ```
 
-Each immediate child of `packages/` describes one source package. `scripts/detect_changes.py` selects affected packages from changed paths, or all packages for shared script/build-workflow changes. The build workflow does not yet use that selection logic.
+Each immediate child of `packages/` describes one source package. `scripts/detect_changes.py` selects affected packages from changed paths, or all packages for shared script/build-workflow changes. The build workflow uses that selection logic to generate a per-package build matrix. On manual dispatch, all packages are selected.
 
 ## CI workflows
 
 - `verify-gnome-calendar-patches.yml` runs on relevant pull requests and can be dispatched manually. It downloads the pinned Linux Mint source and applies the ordered patches. Its first run passed.
-- `build.yml` runs on relevant pull requests and can be dispatched manually. It invokes `scripts/build_package.py` with the package directory. The script reads `package.yaml`, downloads and validates the pinned source, applies the patch series, sets derivative maintainer metadata, creates a local Debian changelog revision, installs build dependencies, builds with `dpkg-buildpackage`, and verifies the resulting `.deb` metadata before upload. The first build produced a downloadable artifact. The current revision additionally checks the resulting Debian `Maintainer` field.
+- `build.yml` runs on pull requests changing package files, shared scripts, or the build workflow; manual dispatch builds all packages. A detection job compares the pull request head against its base and passes the selected package names to a matrix. Each matrix job invokes `scripts/build_package.py` with its package directory. The script reads `package.yaml`, downloads and validates the pinned source, applies the patch series, sets derivative maintainer metadata, creates a local Debian changelog revision, installs build dependencies, builds with `dpkg-buildpackage`, and verifies the resulting `.deb` metadata before upload. The first build produced a downloadable artifact. The current revision additionally checks the resulting Debian `Maintainer` field.
 - `assign-pr.yml` assigns unassigned pull requests. The `PR_ASSIGNEE` repository variable can override the default; it is required for organization-owned repositories.
 - `.github/dependabot.yml` checks GitHub Actions dependencies daily.
 
@@ -52,6 +52,6 @@ Source retrieval currently uses `dget -u -x`: archive checksums are checked agai
 
 ## Planned publication
 
-The intended pipeline will detect affected packages, build their Debian binaries, and automatically publish packages and APT metadata through GitHub Pages after merging. Shared build-tool changes may trigger rebuilding all packages. No separate manual promotion or tagging stage is planned.
+The intended pipeline will build affected Debian binaries and automatically publish packages and APT metadata through GitHub Pages after merging. Shared build-tool changes may trigger rebuilding all packages. No separate manual promotion or tagging stage is planned.
 
-**Not implemented yet:** automatic package selection in the build workflow and APT repository publication through GitHub Pages.
+**Not implemented yet:** APT repository publication through GitHub Pages.
