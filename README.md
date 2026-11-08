@@ -29,6 +29,7 @@ packages/
       0003-diff-timeline-events.patch
 scripts/
   detect_changes.py
+  build_package.py
 .github/
   workflows/
     verify-gnome-calendar-patches.yml
@@ -41,11 +42,13 @@ Each immediate child of `packages/` describes one source package. `scripts/detec
 ## CI workflows
 
 - `verify-gnome-calendar-patches.yml` runs on relevant pull requests and can be dispatched manually. It downloads the pinned Linux Mint source and applies the ordered patches. Its first run passed.
-- `build.yml` runs on relevant pull requests and can be dispatched manually. It downloads and patches the source, adds a local Debian changelog revision, installs build dependencies, attempts a binary build with `dpkg-buildpackage`, and uploads any generated `.deb` files as GitHub Actions artifacts. The first build produced a downloadable artifact. The current revision additionally checks the resulting Debian `Maintainer` field.
+- `build.yml` runs on relevant pull requests and can be dispatched manually. It invokes `scripts/build_package.py` with the package directory. The script reads `package.yaml`, downloads and validates the pinned source, applies the patch series, sets derivative maintainer metadata, creates a local Debian changelog revision, installs build dependencies, builds with `dpkg-buildpackage`, and verifies the resulting `.deb` metadata before upload. The first build produced a downloadable artifact. The current revision additionally checks the resulting Debian `Maintainer` field.
 - `assign-pr.yml` assigns unassigned pull requests. The `PR_ASSIGNEE` repository variable can override the default; it is required for organization-owned repositories.
 - `.github/dependabot.yml` checks GitHub Actions dependencies daily.
 
-The derivative package sets `Maintainer: Dmitrii Safronov <dhameoelin@gmail.com>` in `debian/control` before building and checks that field in the generated `.deb`. The original Debian/Ubuntu maintainer attribution remains available in upstream metadata. The local changelog entry also uses this maintainer identity.\n\nSource retrieval currently uses `dget -u -x`: archive checksums are checked against the `.dsc`, but OpenPGP signature verification is skipped. The build runs on an Ubuntu 24.04 runner; Mint-specific build dependencies may need additional handling.
+The package manifest declares `source.package`, `source.version`, `source.dsc`, `source.format`, `maintainer.name`, `maintainer.email`, `build.distribution`, `build.version_suffix`, and `build.changelog_message`. The build script uses the manifest for source selection, version/format checks, maintainer attribution, and changelog generation. The derivative package sets `Maintainer: Dmitrii Safronov <dhameoelin@gmail.com>` in `debian/control` before building and checks that field in the generated `.deb`. The original Debian/Ubuntu maintainer attribution remains available in upstream metadata. The local changelog entry also uses this maintainer identity.
+
+Source retrieval currently uses `dget -u -x`: archive checksums are checked against the `.dsc`, but OpenPGP signature verification is skipped. The build runs on an Ubuntu 24.04 runner; Mint-specific build dependencies may need additional handling.
 
 ## Planned publication
 
