@@ -1,0 +1,7 @@
+# Linux Mint's published source package, not the development fork.
+# The .dsc references and hashes its source archives.
+source:
+  package: gnome-calendar
+  version: "46.1-1mint2+zara"
+  dsc: https://fastly.linuxmint.io/pool/upstream/g/gnome-calendar/gnome-calendar_46.1-1mint2+zara.dsc
+  format: "3.0 (native)"
