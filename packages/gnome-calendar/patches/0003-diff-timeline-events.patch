@@ -1,0 +1,150 @@
+From: zimniy/gnome-calendar (latest..my)
+Subject: [PATCH] diff timeline events
+
+---
+diff --git a/src/core/gcal-timeline.c b/src/core/gcal-timeline.c
+--- a/src/core/gcal-timeline.c
++++ b/src/core/gcal-timeline.c
+@@ -325,92 +325,44 @@ calculate_changed_events (GcalTimeline            *self,
+                           GcalRange               *old_range,
+                           GcalRange               *new_range)
+ {
+-  g_autoptr (GPtrArray) events_to_remove = NULL;
+-  g_autoptr (GPtrArray) events_to_add = NULL;
+-  GcalRangeOverlap overlap;
+-  gint range_diff;
+-  gint i;
+-
+-  overlap = gcal_range_calculate_overlap (new_range, old_range, NULL);
+-
+-  if (overlap == GCAL_RANGE_NO_OVERLAP)
+-    {
+-      GCAL_TRACE_MSG ("Ranges don't overlap, doing a full cleanup");
+-
+-      events_to_remove = gcal_range_tree_get_data_at_range (self->events, old_range);
+-      events_to_add = gcal_range_tree_get_data_at_range (self->events, new_range);
+-    }
+-  else
+-    {
+-      g_autoptr (GDateTime) old_range_start = NULL;
+-      g_autoptr (GDateTime) old_range_end = NULL;
+-      g_autoptr (GDateTime) new_range_start = NULL;
+-      g_autoptr (GDateTime) new_range_end = NULL;
+-
+-      GCAL_TRACE_MSG ("Ranges overlap, doing a diff");
++  g_autoptr (GPtrArray) old_events = NULL;
++  g_autoptr (GPtrArray) new_events = NULL;
++  g_autoptr (GHashTable) old_event_set = NULL;
++  g_autoptr (GHashTable) new_event_set = NULL;
++  guint i;
+ 
+-      events_to_add = g_ptr_array_new ();
+-      events_to_remove = g_ptr_array_new ();
+-
+-      old_range_start = gcal_range_get_start (old_range);
+-      old_range_end = gcal_range_get_end (old_range);
+-      new_range_start = gcal_range_get_start (new_range);
+-      new_range_end = gcal_range_get_end (new_range);
+-
+-      /* Start ranges diff */
+-      range_diff = g_date_time_compare (old_range_start, new_range_start);
+-      if (range_diff != 0)
+-        {
+-          g_autoptr (GPtrArray) events = NULL;
+-
+-          if (range_diff < 0)
+-            {
+-              g_autoptr (GcalRange) range = gcal_range_new (old_range_start, new_range_start, GCAL_RANGE_DEFAULT);
+-
+-              /* Removed */
+-              events = gcal_range_tree_get_data_at_range (self->events, range);
+-              if (events)
+-                g_ptr_array_extend (events_to_remove, events, NULL, NULL);
+-            }
+-          else if (range_diff > 0)
+-            {
+-              g_autoptr (GcalRange) range = gcal_range_new (new_range_start, old_range_start, GCAL_RANGE_DEFAULT);
++  if (gcal_range_compare (old_range, new_range) == 0)
++    return;
+ 
+-              /* Added */
+-              events = gcal_range_tree_get_data_at_range (self->events, range);
+-              if (events)
+-                g_ptr_array_extend (events_to_add, events, NULL, NULL);
+-            }
+-        }
++  /*
++   * An event may overlap both the old and the new range even when it
++   * overlaps an edge that is entering or leaving the visible range.
++   * Diff event membership, not the intervals at the range boundaries.
++   *
++   * The timeline cache holds the same GcalEvent instances for both
++   * queries, so pointer identity is sufficient here.
++   */
++  old_events = gcal_range_tree_get_data_at_range (self->events, old_range);
++  new_events = gcal_range_tree_get_data_at_range (self->events, new_range);
++  old_event_set = g_hash_table_new (g_direct_hash, g_direct_equal);
++  new_event_set = g_hash_table_new (g_direct_hash, g_direct_equal);
+ 
+-      /* End ranges diff */
+-      range_diff = g_date_time_compare (old_range_end, new_range_end);
+-      if (range_diff != 0)
+-        {
+-          g_autoptr (GPtrArray) events = NULL;
++  for (i = 0; old_events && i < old_events->len; i++)
++    g_hash_table_add (old_event_set, g_ptr_array_index (old_events, i));
+ 
+-          if (range_diff < 0)
+-            {
+-              g_autoptr (GcalRange) range = gcal_range_new (old_range_end, new_range_end, GCAL_RANGE_DEFAULT);
++  for (i = 0; new_events && i < new_events->len; i++)
++    g_hash_table_add (new_event_set, g_ptr_array_index (new_events, i));
+ 
+-              events = gcal_range_tree_get_data_at_range (self->events, range);
+-              if (events)
+-                g_ptr_array_extend (events_to_add, events, NULL, NULL);
+-            }
+-          else if (range_diff > 0)
+-            {
+-              g_autoptr (GcalRange) range = gcal_range_new (new_range_end, old_range_end, GCAL_RANGE_DEFAULT);
++  for (i = 0; old_events && i < old_events->len; i++)
++    {
++      GcalEvent *event = g_ptr_array_index (old_events, i);
+ 
+-              events = gcal_range_tree_get_data_at_range (self->events, range);
+-              if (events)
+-                g_ptr_array_extend (events_to_remove, events, NULL, NULL);
+-            }
+-        }
+-    }
++      if (g_hash_table_contains (new_event_set, event))
++        continue;
+ 
+-  for (i = 0; events_to_remove && i < events_to_remove->len; i++)
+-    {
+-      GcalEvent *event = g_ptr_array_index (events_to_remove, i);
++      /* Avoid duplicate notifications if the cache contains the same object twice. */
++      if (!g_hash_table_remove (old_event_set, event))
++        continue;
+ 
+       GCAL_TRACE_MSG ("Removing event from subscriber %s due to time range change (event: '%s' (%s))",
+                       G_OBJECT_TYPE_NAME (subscriber),
+@@ -420,9 +372,16 @@ calculate_changed_events (GcalTimeline            *self,
+       queue_event_data (self, REMOVE_EVENT, subscriber, event, NULL, FALSE);
+     }
+ 
+-  for (i = 0; events_to_add && i < events_to_add->len; i++)
++  for (i = 0; new_events && i < new_events->len; i++)
+     {
+-      GcalEvent *event = g_ptr_array_index (events_to_add, i);
++      GcalEvent *event = g_ptr_array_index (new_events, i);
++
++      if (g_hash_table_contains (old_event_set, event))
++        continue;
++
++      /* Only notify the subscriber once per cached event instance. */
++      if (!g_hash_table_remove (new_event_set, event))
++        continue;
+ 
+       GCAL_TRACE_MSG ("Queueing event addition for subscriber %s (event: '%s' (%s))",
+                       G_OBJECT_TYPE_NAME (subscriber),
