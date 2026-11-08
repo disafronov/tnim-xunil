@@ -34,6 +34,20 @@ jobs:
             [[ -n "$name" && "$name" != \#* ]] || continue
             patch --batch --forward --fuzz=0 -p1 < "$package_dir/patches/$name"
           done < "$package_dir/patches/series"
+          # This derivative is maintained independently of Ubuntu's package.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          control = Path("debian/control")
+          original = "Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>"
+          replacement = "Maintainer: Dmitrii Safronov <dhameoelin@gmail.com>"
+          text = control.read_text()
+          if text.count(original) != 1:
+              raise SystemExit("Unexpected upstream Maintainer field")
+          control.write_text(text.replace(original, replacement, 1))
+          PY
+          export DEBFULLNAME='Dmitrii Safronov'
+          export DEBEMAIL='dhameoelin@gmail.com'
           dch --local '+my' --distribution zara --force-distribution \
             'Apply locally maintained gnome-calendar fixes.'
           echo "SOURCE_DIR=$PWD" >> "$GITHUB_ENV"
@@ -53,6 +67,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/debs"
           find .. -maxdepth 1 -type f -name '*.deb' -exec cp -v {} "$RUNNER_TEMP/debs/" \;
           test -n "$(find "$RUNNER_TEMP/debs" -maxdepth 1 -name '*.deb' -print -quit)"
+          for deb in "$RUNNER_TEMP"/debs/*.deb; do
+            maintainer="$(dpkg-deb --field "$deb" Maintainer)"
+            echo "$deb: Maintainer=$maintainer"
+            test "$maintainer" = 'Dmitrii Safronov <dhameoelin@gmail.com>'
+          done
       - name: Upload DEB artifacts
         uses: actions/upload-artifact@v4
         with:
