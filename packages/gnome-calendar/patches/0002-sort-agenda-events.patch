@@ -1,0 +1,62 @@
+From: zimniy/gnome-calendar (latest..my)
+Subject: [PATCH] sort agenda events
+
+---
+diff --git a/src/gui/views/gcal-agenda-view.c b/src/gui/views/gcal-agenda-view.c
+--- a/src/gui/views/gcal-agenda-view.c
++++ b/src/gui/views/gcal-agenda-view.c
+@@ -137,6 +137,25 @@ get_start_date_for_row (GcalAgendaView *self,
+   return self->date;
+ }
+ 
++/* Keep the selected-day clamp for ongoing events without discarding
++ * the time of events that actually start on the selected date. */
++static GDateTime *
++get_sort_start_date_for_row (GcalAgendaView *self,
++                             GtkListBoxRow  *row)
++{
++  GtkWidget *widget = gtk_list_box_row_get_child (row);
++
++  if (GCAL_IS_EVENT_WIDGET (widget))
++    {
++      GDateTime *date = gcal_event_widget_get_date_start (GCAL_EVENT_WIDGET (widget));
++
++      if (gcal_date_time_compare_date (date, self->date) >= 0)
++        return date;
++    }
++
++  return self->date;
++}
++
+ static GDateTime *
+ get_end_date_for_row (GcalAgendaView *self,
+                       GtkListBoxRow  *row)
+@@ -317,8 +336,18 @@ sort_func (GtkListBoxRow *row1,
+   if (multiday1 != multiday2)
+     return multiday1 ? -1 : 1;
+ 
+-  return gcal_date_time_compare_date (get_end_date_for_row (self, row1),
+-                                      get_end_date_for_row (self, row2));
++  if (multiday1)
++    return gcal_date_time_compare_date (get_end_date_for_row (self, row1),
++                                        get_end_date_for_row (self, row2));
++
++  result = g_date_time_compare (get_sort_start_date_for_row (self, row1),
++                                get_sort_start_date_for_row (self, row2));
++
++  if (result != 0)
++    return result;
++
++  return g_date_time_compare (get_end_date_for_row (self, row1),
++                              get_end_date_for_row (self, row2));
+ }
+ 
+ static void
+@@ -431,6 +460,7 @@ gcal_agenda_view_set_date (GcalView  *view,
+   update_no_events_row (self);
+ 
+   gcal_timeline_subscriber_range_changed (GCAL_TIMELINE_SUBSCRIBER (view));
++  gtk_list_box_invalidate_sort (GTK_LIST_BOX (self->list_box));
+ 
+   GCAL_EXIT;
+ }
