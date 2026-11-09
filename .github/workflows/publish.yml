@@ -1,6 +1,11 @@
 name: Publish APT repository
 
 on:
+  pull_request:
+    paths:
+      - packages/**
+      - scripts/**
+      - .github/workflows/publish.yml
   push:
     branches: [main]
     paths:
@@ -22,9 +27,6 @@ jobs:
   publish:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       - name: Install packaging tools
@@ -52,16 +54,42 @@ jobs:
           mkdir -p "$repo/pool"
           cp "$RUNNER_TEMP"/debs/*.deb "$repo/pool/"
           cd "$repo"
-          dpkg-scanpackages --multiversion pool /dev/null > Packages
+          dpkg-scanpackages pool /dev/null > Packages
           gzip -n -9 -c Packages > Packages.gz
           apt-ftparchive release . > Release
           touch .nojekyll
           test -s Packages.gz
           test -s Release
-      - uses: actions/configure-pages@v5
+          test "$(grep -c '^Package: ' Packages)" -gt 0
+          while IFS= read -r deb; do
+            name="$(dpkg-deb -f "$deb" Package)"
+            grep -Fxq "Package: $name" Packages
+          done < <(find pool -type f -name '*.deb' | sort)
+      - name: Validate repository with APT
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$RUNNER_TEMP/site"
+          mkdir -p "$RUNNER_TEMP/apt/lists/partial"
+          printf 'deb [trusted=yes] file:%s ./\n' "$repo" > "$RUNNER_TEMP/apt/sources.list"
+          sudo apt-get update \
+            -o Dir::Etc::sourcelist="$RUNNER_TEMP/apt/sources.list" \
+            -o Dir::Etc::sourceparts=- \
+            -o Dir::State::lists="$RUNNER_TEMP/apt/lists" \
+            -o APT::Get::List-Cleanup=0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: apt-repository
+          path: ${{ runner.temp }}/site/
+          include-hidden-files: true
+      - name: Configure Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           path: ${{ runner.temp }}/site
       - name: Deploy GitHub Pages
+        if: github.event_name != 'pull_request'
         id: deployment
         uses: actions/deploy-pages@v4
