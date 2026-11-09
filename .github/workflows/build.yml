@@ -62,7 +62,7 @@ jobs:
           /usr/bin/python3 scripts/build_package.py \
             "packages/${{ matrix.package }}" "$RUNNER_TEMP/debs"
       - name: Upload DEB artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.package }}-debs
           path: ${{ runner.temp }}/debs/*.deb
