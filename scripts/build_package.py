@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a patched Debian package from its declarative manifest."""
 import argparse
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
@@ -69,8 +70,9 @@ def main():
                     stdin=stream, cwd=tree, check=True,
                 )
 
+        version = f'{source["version"]}{build["version_suffix"]}{datetime.now(timezone.utc):%Y%m%d%H%M%S}'
         run(
-            "dch", "--local", build["version_suffix"],
+            "dch", "--newversion", version,
             "--distribution", build["distribution"], "--force-distribution",
             build["changelog_message"], cwd=tree, env=env,
         )
