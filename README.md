@@ -34,6 +34,7 @@ scripts/
   workflows/
     verify-gnome-calendar-patches.yml
     build.yml
+    publish.yml
     assign-pr.yml
 ```
 
@@ -50,8 +51,14 @@ The package manifest declares `source.package`, `source.version`, `source.dsc`, 
 
 Source retrieval currently uses `dget -u -x`: archive checksums are checked against the `.dsc`, but OpenPGP signature verification is skipped. The build runs on an Ubuntu 24.04 runner; Mint-specific build dependencies may need additional handling.
 
-## Planned publication
+## APT repository publication
 
-The intended pipeline will build affected Debian binaries and automatically publish packages and APT metadata through GitHub Pages after merging. Shared build-tool changes may trigger rebuilding all packages. No separate manual promotion or tagging stage is planned.
+`.github/workflows/publish.yml` builds **all** configured packages from their pinned manifests on changes to `main` affecting `packages/`, `scripts/`, or the publication workflow, and on manual dispatch. Building all packages avoids dropping unchanged packages from the published repository. It generates a flat APT repository (`pool/`, `Packages`, `Packages.gz`, `Release`) and deploys it to GitHub Pages. The build must succeed before deployment; an unsuccessful build does not replace the previously published site.
 
-**Not implemented yet:** APT repository publication through GitHub Pages.
+Enable **GitHub Pages → Build and deployment → Source: GitHub Actions** in repository settings. Once deployed, configure APT with:
+
+```text
+deb [trusted=yes] https://disafronov.github.io/tnim-xunil/ ./
+```
+
+The repository is **unsigned**: `trusted=yes` explicitly disables APT signature verification for this source. Use it only if you trust the repository owner and GitHub Pages delivery. Signing and key distribution are not implemented. The URL is the expected GitHub Pages project URL, not a verified live deployment. The workflow does not publish packages to `main` or create a separate promotion stage.
