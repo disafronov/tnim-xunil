@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import shutil
 import tempfile
 
 import yaml
@@ -46,6 +47,11 @@ def main():
         ).strip()
         if changelog != source["version"]:
             raise RuntimeError(f"Source version mismatch: {changelog}")
+        actual_package = subprocess.check_output(
+            ["dpkg-parsechangelog", "-S", "Source"], cwd=tree, text=True
+        ).strip()
+        if actual_package != source["package"]:
+            raise RuntimeError(f"Source package mismatch: {actual_package}")
         control = tree / "debian/control"
         text = control.read_text()
         matches = re.findall(r"^Maintainer: .+$", text, flags=re.MULTILINE)
@@ -84,7 +90,7 @@ def main():
             if actual != identity:
                 raise RuntimeError(f"{package.name}: unexpected Maintainer: {actual}")
             destination = output_dir / package.name
-            destination.write_bytes(package.read_bytes())
+            shutil.copy2(package, destination)
             print(f"Built {destination} (Maintainer: {actual})", flush=True)
 
 
