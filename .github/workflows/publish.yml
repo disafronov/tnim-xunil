@@ -184,7 +184,7 @@ jobs:
           include-hidden-files: true
       - name: Configure Pages
         uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/site
       - name: Deploy GitHub Pages
