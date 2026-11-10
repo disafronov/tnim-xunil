@@ -31,7 +31,7 @@ class RestoreAptTests(unittest.TestCase):
     def test_missing_index_is_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch("scripts.restore_apt.fetch", side_effect=HTTPError("url", 404, "Not Found", {}, None)):
-                self.assertEqual(restore("https://example.org/repo/", Path(tmp)), "")
+                self.assertEqual(restore("https://example.org/repo/", Path(tmp), public_key=Path("key.asc")), "")
 
     def test_missing_binary_requests_source_rebuild(self):
         record = (
@@ -82,6 +82,19 @@ class RestoreAptTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Invalid signature"):
                     restore("https://example.org/repo/", Path(tmp), public_key=Path("key.asc"))
 
+    def test_signed_index_checksum_validation(self):
+        index = gzip.compress(b"package list")
+        digest = hashlib.sha256(index).hexdigest()
+        release = (
+            "-----BEGIN PGP SIGNED MESSAGE-----\\nHash: SHA256\\n\\n"
+            f"SHA256:\\n {digest} {len(index)} Packages.gz\\n"
+            "-----BEGIN PGP SIGNATURE-----\\nsignature\\n-----END PGP SIGNATURE-----\\n"
+        ).encode()
+        with patch("scripts.restore_apt.subprocess.run"):
+            verify_index(index, release, Path("key.asc"))
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                verify_index(b"tampered", release, Path("key.asc"))
+
     def test_transient_http_error_retries(self):
         with patch("scripts.restore_apt.urllib.request.urlopen", side_effect=[
             HTTPError("url", 503, "Unavailable", {}, None),
@@ -111,7 +124,7 @@ class RestoreAptTests(unittest.TestCase):
     def test_checksum_mismatch_is_fatal(self):
         record = "Package: sample\nFilename: pool/sample.deb\nSize: 3\nSHA256: " + "0" * 64 + "\n"
         with tempfile.TemporaryDirectory() as tmp:
-            with patch("scripts.restore_apt.fetch", side_effect=[gzip.compress(record.encode()), b"signed", b"abc"]):
+            with patch("scripts.restore_apt.verify_index"), patch("scripts.restore_apt.fetch", side_effect=[gzip.compress(record.encode()), b"signed", b"abc"]):
                 with self.assertRaises(ValueError):
                     restore("https://example.org/repo/", Path(tmp))
 
@@ -123,7 +136,7 @@ class RestoreAptTests(unittest.TestCase):
         )
         sha = "a" * 40
         with tempfile.TemporaryDirectory() as tmp:
-            with patch("scripts.restore_apt.fetch", side_effect=[gzip.compress(record.encode()), b"signed", payload, sha.encode()]):
+            with patch("scripts.restore_apt.verify_index"), patch("scripts.restore_apt.fetch", side_effect=[gzip.compress(record.encode()), b"signed", payload, sha.encode()]):
                 self.assertEqual(restore("https://example.org/repo/", Path(tmp)), sha)
                 self.assertEqual((Path(tmp) / "pool/sample.deb").read_bytes(), payload)
 
