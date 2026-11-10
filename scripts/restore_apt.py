@@ -33,12 +33,14 @@ def restore(base_url, destination, missing_sources=None):
     base_url = base_url.rstrip("/") + "/"
     destination.mkdir(parents=True, exist_ok=True)
     # Missing index means an empty archive; other download errors remain fatal.
+    index_missing = False
     try:
         raw = fetch(urllib.parse.urljoin(base_url, "Packages.gz"))
     except urllib.error.HTTPError as error:
         if error.code != 404:
             raise
         index = ""
+        index_missing = True
     else:
         index = gzip.decompress(raw).decode("utf-8")
     seen = set()
@@ -69,6 +71,9 @@ def restore(base_url, destination, missing_sources=None):
         target.write_bytes(payload)
     if missing_sources is not None:
         missing_sources.write_text("".join(f"{source}\n" for source in sorted(missing)))
+    # No index means no usable published packages, regardless of any stale marker.
+    if index_missing:
+        return ""
     # The state file is optional only during migration from the old layout.
     try:
         state = fetch(urllib.parse.urljoin(base_url, ".published-commit")).decode().strip()
