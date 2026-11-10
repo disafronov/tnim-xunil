@@ -18,7 +18,7 @@ def detect(changed_paths: list[str], packages_root: Path) -> list[str]:
         parts = PurePosixPath(raw).parts
         if len(parts) >= 3 and parts[0] == "packages" and parts[1] in available:
             selected.add(parts[1])
-        elif parts and (parts[0] == "scripts" or raw == ".github/workflows/build.yml"):
+        elif parts and (parts[0] == "scripts" or raw in (".github/workflows/build.yml", ".github/workflows/publish.yml")):
             rebuild_all = True
     return sorted(available if rebuild_all else selected)
 
