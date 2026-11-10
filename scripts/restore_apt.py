@@ -73,6 +73,8 @@ def restore(base_url, destination, missing_sources=None):
         missing_sources.write_text("".join(f"{source}\n" for source in sorted(missing)))
     # No index means no usable published packages, regardless of any stale marker.
     if index_missing:
+        if missing_sources is not None:
+            missing_sources.write_text("")
         return ""
     # The state file is optional only during migration from the old layout.
     try:
