@@ -61,4 +61,10 @@ Enable **GitHub Pages → Build and deployment → Source: GitHub Actions** in r
 deb [trusted=yes] https://disafronov.github.io/tnim-xunil/ ./
 ```
 
+The published APT `Release` metadata identifies the archive as `tnim-xunil`
+(`Origin`), labels it `Dmitrii Safronov's Patched Packages`, and targets
+Linux Mint 22.3 Zena (`Suite`/`Codename: zena`, `Version: 22.3`).
+Its description is `Personal fixes for upstream bugs and annoyances`.
+Derivative package versions use `+disafronovYYYYMMDDHHMMSS` (UTC).
+
 The repository is **unsigned**: `trusted=yes` explicitly disables APT signature verification for this source. Use it only if you trust the repository owner and GitHub Pages delivery. Signing and key distribution are not implemented. The URL is the expected GitHub Pages project URL, not a verified live deployment. The workflow does not publish packages to `main` or create a separate promotion stage.
