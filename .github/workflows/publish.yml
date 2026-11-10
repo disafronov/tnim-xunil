@@ -137,7 +137,7 @@ jobs:
           fi
           if [[ "$publish" == false ]]; then
             # Verify the files not covered by the signed package index.
-            /usr/bin/python3 scripts/check_published_files.py \
+            /usr/bin/python3 -m scripts.check_published_files \
               https://disafronov.github.io/tnim-xunil/ \
               --public-key tnim-xunil.asc --index-html index.html || publish=true
           fi
