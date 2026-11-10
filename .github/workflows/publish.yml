@@ -6,6 +6,7 @@ on:
     paths:
       - packages/**
       - scripts/**
+      - tnim-xunil.asc
       - .github/workflows/publish.yml
 
 permissions:
@@ -57,7 +58,7 @@ jobs:
           sudo apt-get update
           sudo apt-get -y dist-upgrade
           sudo apt-get install -y --no-install-recommends \
-            equivs patch python3-yaml apt-utils
+            equivs patch python3-yaml apt-utils gnupg
       - name: Restore published packages
         id: restore
         shell: bash
@@ -166,6 +167,7 @@ jobs:
           grep -Fxq 'Version: 22.3' Release
           grep -Fxq 'Description: Personal fixes for upstream bugs and annoyances' Release
           cp "$GITHUB_WORKSPACE/index.html" index.html
+          cp "$GITHUB_WORKSPACE/tnim-xunil.asc" tnim-xunil.asc
           touch .nojekyll
           printf '%s\n' "$GITHUB_SHA" > .published-commit
           test -s Packages.gz
@@ -174,6 +176,32 @@ jobs:
             name="$(dpkg-deb -f "$deb" Package)"
             grep -Fxq "Package: $name" Packages
           done < <(find pool -type f -name '*.deb' | sort)
+      - name: Sign APT release metadata
+        shell: bash
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_FINGERPRINT: ${{ vars.APT_SIGNING_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          : "${APT_SIGNING_KEY:?Missing APT_SIGNING_KEY secret}"
+          : "${APT_SIGNING_FINGERPRINT:?Missing APT_SIGNING_FINGERPRINT variable}"
+          export GNUPGHOME
+          GNUPGHOME="$(mktemp -d)"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+          chmod 700 "$GNUPGHOME"
+          printf '%s\n' "$APT_SIGNING_KEY" | gpg --batch --import
+          actual="$(gpg --batch --with-colons --list-secret-keys "$APT_SIGNING_FINGERPRINT" | awk -F: '$1 == "fpr" {print $10; exit}')"
+          [[ "$actual" == "$APT_SIGNING_FINGERPRINT" ]]
+          repo="$RUNNER_TEMP/site"
+          gpg --batch --yes --pinentry-mode loopback \
+            --local-user "$APT_SIGNING_FINGERPRINT" \
+            --clearsign --output "$repo/InRelease" "$repo/Release"
+          gpg --batch --yes --pinentry-mode loopback \
+            --local-user "$APT_SIGNING_FINGERPRINT" \
+            --detach-sign --output "$repo/Release.gpg" "$repo/Release"
+          gpg --batch --yes --dearmor --output "$RUNNER_TEMP/archive-key.gpg" "$repo/tnim-xunil.asc"
+          gpgv --keyring "$RUNNER_TEMP/archive-key.gpg" "$repo/InRelease"
+          gpgv --keyring "$RUNNER_TEMP/archive-key.gpg" "$repo/Release.gpg" "$repo/Release"
       - name: Validate repository with APT
         shell: bash
         run: |
