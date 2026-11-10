@@ -165,6 +165,7 @@ jobs:
           grep -Fxq 'Codename: zena' Release
           grep -Fxq 'Version: 22.3' Release
           grep -Fxq 'Description: Personal fixes for upstream bugs and annoyances' Release
+          cp "$GITHUB_WORKSPACE/index.html" index.html
           touch .nojekyll
           printf '%s\n' "$GITHUB_SHA" > .published-commit
           test -s Packages.gz
