@@ -26,9 +26,33 @@ class RestoreAptTests(unittest.TestCase):
                 with self.assertRaises(OSError):
                     restore("https://example.org/repo/", Path(tmp))
 
-    def test_missing_index_is_not_empty(self):
+    def test_missing_index_is_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch("scripts.restore_apt.fetch", side_effect=HTTPError("url", 404, "Not Found", {}, None)):
+                self.assertEqual(restore("https://example.org/repo/", Path(tmp)), "")
+
+    def test_missing_binary_requests_source_rebuild(self):
+        record = (
+            "Package: gnome-calendar-data\nSource: gnome-calendar\n"
+            "Filename: pool/missing.deb\nSize: 3\nSHA256: " + "0" * 64 + "\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp, "missing-sources")
+            def fetch(url):
+                if url.endswith("Packages.gz"):
+                    return gzip.compress(record.encode())
+                raise HTTPError(url, 404, "Not Found", {}, None)
+            with patch("scripts.restore_apt.fetch", side_effect=fetch):
+                self.assertEqual(restore("https://example.org/repo/", Path(tmp), output), "")
+            self.assertEqual(output.read_text(), "gnome-calendar\n")
+
+    def test_missing_binary_does_not_hide_other_http_errors(self):
+        record = "Package: sample\nFilename: pool/sample.deb\nSize: 3\nSHA256: " + "0" * 64 + "\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("scripts.restore_apt.fetch", side_effect=[
+                gzip.compress(record.encode()),
+                HTTPError("url", 503, "Unavailable", {}, None),
+            ]):
                 with self.assertRaises(HTTPError):
                     restore("https://example.org/repo/", Path(tmp))
 
