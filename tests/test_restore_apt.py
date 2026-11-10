@@ -85,7 +85,7 @@ class RestoreAptTests(unittest.TestCase):
     def test_signed_index_checksum_validation(self):
         index = gzip.compress(b"package list")
         digest = hashlib.sha256(index).hexdigest()
-        release = f"SHA256:\\n {digest} {len(index)} Packages.gz\\n".encode()
+        release = f"SHA256:\n {digest} {len(index)} Packages.gz\n".encode()
 
         def verified_release(command, **kwargs):
             output = Path(command[command.index("--output") + 1])
@@ -100,7 +100,7 @@ class RestoreAptTests(unittest.TestCase):
     def test_signed_release_uses_verified_output_not_armored_input(self):
         index = gzip.compress(b"package list")
         digest = hashlib.sha256(index).hexdigest()
-        release = f"SHA256:\\n {digest} {len(index)} Packages.gz\\n".encode()
+        release = f"SHA256:\n {digest} {len(index)} Packages.gz\n".encode()
 
         def verified_release(command, **kwargs):
             Path(command[command.index("--output") + 1]).write_bytes(release)
