@@ -129,6 +129,9 @@ jobs:
           for source in (temp / "missing-sources").read_text().splitlines():
               if source in sources:
                   rebuild.add(sources[source])
+              else:
+                  with (temp / "removed-binaries").open("a") as output:
+                      print(f"missing binary from retired source: {source}", file=output)
           (temp / "rebuild").write_text("".join(f"{name}\n" for name in sorted(rebuild)))
           PY
           echo "Packages selected for rebuild:"
