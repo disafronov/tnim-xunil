@@ -61,7 +61,7 @@ jobs:
           from pathlib import Path
           path = Path(os.environ["RUNNER_TEMP"], "changed-files")
           changed = path.read_text().splitlines()
-          path.write_text("\\n".join(p for p in changed if p.startswith("packages/") or p == "scripts/build_package.py") + "\\n")
+          path.write_text("\n".join(p for p in changed if p.startswith("packages/") or p == "scripts/build_package.py") + "\n")
           PY
             python3 scripts/detect_changes.py \
               --changed-files "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/matrix.json"
