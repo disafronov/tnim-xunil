@@ -124,7 +124,7 @@ def restore(base_url, destination, missing_sources=None, public_key=None):
         return ""
     # The state file is optional only during migration from the old layout.
     try:
-        state = fetch(urllib.parse.urljoin(base_url, ".published-commit")).decode().strip()
+        state = fetch(urllib.parse.urljoin(base_url, "published-commit")).decode().strip()
     except urllib.error.HTTPError as error:
         if error.code != 404:
             raise
