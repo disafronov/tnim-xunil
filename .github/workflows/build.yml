@@ -44,6 +44,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
+          git config --global --add safe.directory '*'
           merge_base="$(git merge-base "$BASE_SHA" HEAD)"
           git diff --name-only "$merge_base" HEAD > "$RUNNER_TEMP/changed-files"
           python3 scripts/detect_changes.py --changed-files "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/matrix.json"
