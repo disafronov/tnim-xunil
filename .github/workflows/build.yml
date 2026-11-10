@@ -70,7 +70,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/apt-archives/partial"
           printf 'Dir::Cache::archives "%s";\nAPT::Keep-Downloaded-Packages "true";\n' \
             "$RUNNER_TEMP/apt-archives" | sudo tee /etc/apt/apt.conf.d/99-ci-package-cache > /dev/null
-      # Re-run unchanged package builds to measure APT cache reuse.
       - name: Restore APT downloads
         if: steps.packages.outputs.has_packages == 'true'
         uses: actions/cache@v4
