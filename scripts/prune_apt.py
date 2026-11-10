@@ -7,19 +7,28 @@ import subprocess
 
 
 def fields(path):
-    output = subprocess.check_output(
-        ["dpkg-deb", "--field", str(path), "Package", "Version", "Architecture"],
-        text=True,
-    ).splitlines()
-    if len(output) != 3:
-        raise ValueError(f"Unexpected package metadata: {path}")
-    return tuple(output)
+    values = []
+    for field in ("Package", "Version", "Architecture"):
+        value = subprocess.check_output(
+            ["dpkg-deb", "--field", str(path), field],
+            text=True,
+        ).strip()
+        if not value or "\\n" in value:
+            raise ValueError(f"Invalid {field} metadata: {path}")
+        values.append(value)
+    return tuple(values)
 
 
 def compare(a, b):
     if a == b:
         return 0
-    return 1 if subprocess.run(["dpkg", "--compare-versions", a, "gt", b]).returncode == 0 else -1
+    for relation, result in (("gt", 1), ("lt", -1)):
+        completed = subprocess.run(["dpkg", "--compare-versions", a, relation, b], check=False)
+        if completed.returncode == 0:
+            return result
+        if completed.returncode != 1:
+            raise subprocess.CalledProcessError(completed.returncode, completed.args)
+    raise ValueError(f"Versions could not be ordered: {a!r}, {b!r}")
 
 
 def prune(pool, keep=2):
