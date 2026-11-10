@@ -1,22 +1,122 @@
 # tnim-xunil
 
-Custom Linux Mint packages built from pinned upstream source packages and independently maintained patches.
+Independently maintained patches for Linux Mint packages, built and distributed through a signed APT repository.
 
-The repository stores **no copies of upstream source trees** and does not commit generated binary packages to `main`.
+This project rebuilds pinned Linux Mint source packages with independently maintained fixes for upstream issues. It does not store copies of upstream source trees or generated binary packages in Git; published binaries are retained in the APT archive.
 
-## Package: gnome-calendar
+**Supported distribution:** Linux Mint 22.3 (Zena), amd64.
 
-`packages/gnome-calendar/package.yaml` pins the Linux Mint source package `gnome-calendar` at version `46.1-1mint2+zara` through the Linux Mint APT source repositories. The source format is `3.0 (native)`.
+## Available packages
 
-Three local fixes are stored as ordered unified-diff patches in `packages/gnome-calendar/patches/`:
+| Package | Fixes |
+| --- | --- |
+| `gnome-calendar` | Today action availability, chronological agenda ordering, and timeline updates when the visible range changes. |
 
-1. `0001-enable-today-action.patch`: enable the Today action when the selected date differs from today.
+The `gnome-calendar` package currently uses Linux Mint source version `46.1-1mint2+zara` (`3.0 (native)`). Its ordered patches are in [`packages/gnome-calendar/patches/`](packages/gnome-calendar/patches/):
+
+1. `0001-enable-today-action.patch`: enable Today when the selected date differs from today.
 2. `0002-sort-agenda-events.patch`: sort single-day agenda events chronologically.
 3. `0003-diff-timeline-events.patch`: compare timeline event membership when the visible range changes.
 
-The application order is defined by `patches/series`. The package build downloads the pinned Mint source and applies all three patches. Patch application is verified as part of the package build. The resulting Debian packages are published through GitHub Pages after successful validation.
+The patch order is defined by `patches/series`.
 
-## Repository layout
+## Installation
+
+This is a third-party APT repository. Review its packages and signing key before trusting them. APT signatures authenticate repository metadata and package integrity; they do not guarantee the correctness or safety of patches.
+
+### Signing key
+
+The repository publishes its ASCII-armored OpenPGP public key as [`tnim-xunil.asc`](https://disafronov.github.io/tnim-xunil/tnim-xunil.asc).
+
+Expected fingerprint:
+
+```text
+C1BB E193 86BE 4FA1 4113 DC22 970F 6970 CA2A 6BC0
+```
+
+Install the key without converting its format:
+
+```sh
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://disafronov.github.io/tnim-xunil/tnim-xunil.asc | \
+  sudo tee /etc/apt/keyrings/tnim-xunil.asc > /dev/null
+sudo chmod 0644 /etc/apt/keyrings/tnim-xunil.asc
+gpg --show-keys --fingerprint /etc/apt/keyrings/tnim-xunil.asc
+```
+
+Verify the fingerprint against the value above before trusting the key.
+
+### APT source
+
+```sh
+sudo tee /etc/apt/sources.list.d/tnim-xunil.list > /dev/null <<'EOF'
+deb [signed-by=/etc/apt/keyrings/tnim-xunil.asc] https://disafronov.github.io/tnim-xunil/ ./
+EOF
+```
+
+Replace any older `trusted=yes` entry for this repository rather than keeping both.
+
+### Package priority
+
+Choose **one** of the following configurations. Both select packages by the APT Release `Origin: tnim-xunil` field, rather than by hostname.
+
+**All packages:** prefer every package published by this repository.
+
+```sh
+sudo tee /etc/apt/preferences.d/tnim-xunil.pref > /dev/null <<'EOF'
+Package: *
+Pin: release o=tnim-xunil
+Pin-Priority: 1001
+EOF
+```
+
+**Individual packages:** prefer only `gnome-calendar` from this repository.
+
+```sh
+sudo tee /etc/apt/preferences.d/tnim-xunil.pref > /dev/null <<'EOF'
+Package: gnome-calendar
+Pin: release o=tnim-xunil
+Pin-Priority: 1001
+EOF
+```
+
+To target additional packages, add their names to the `Package:` field separated by spaces, or use separate preference records. Both examples replace the same preferences file; they are alternatives, not cumulative steps.
+
+Priority `1001` allows APT to select an older version from this repository over a newer version from an ordinary repository (a downgrade). Review proposed package changes before proceeding. Pinning controls candidate selection, not which packages a repository is allowed to publish.
+
+### Update and install
+
+```sh
+sudo apt update
+apt policy gnome-calendar
+sudo apt install gnome-calendar
+```
+
+Inspect the candidate version and origin reported by `apt policy` before installing.
+
+## How it works
+
+### Source packages and patches
+
+Each immediate child of `packages/` defines one source package. Its `package.yaml` pins the upstream source package, version and source format, and specifies maintainer and build metadata. The build downloads that exact source using `apt-get source` from Linux Mint APT repositories, checks its identity and format, applies the ordered patch series, updates the changelog and maintainer metadata, and builds with `dpkg-buildpackage`. Patch application and the generated Debian package's `Maintainer` field are verified.
+
+### Build and publication
+
+Pull requests run tests and build affected packages. The build uses `linuxmintd/mint22.3-amd64:latest` on an Ubuntu 24.04 GitHub Actions runner. Changes to shared build scripts or workflows can trigger builds of all packages.
+
+On relevant pushes to `main`, publication restores existing packages from the published APT archive, verifies SHA256 checksums, and rebuilds only packages affected since the last published commit. If a referenced binary is missing, its source package is rebuilt. Download failures other than the documented empty-archive/missing-binary cases and checksum mismatches abort publication.
+
+The archive retains the latest **two Debian versions per binary package and architecture**. It generates a flat APT index (`pool/`, `Packages`, `Packages.gz`, `Release`) with `dpkg-scanpackages --multiversion`, signs `InRelease` and `Release.gpg`, validates signatures and APT access, and deploys through GitHub Pages. Failed builds or validation do not replace the previously published site.
+
+Retaining binaries means previously published packages remain available even if the pinned source is subsequently removed upstream; rebuilding that source still requires it to be available.
+
+### Repository signing
+
+The dedicated Ed25519 OpenPGP key signs APT Release metadata. The workflow verifies signatures and checks APT access using `signed-by=`, not `trusted=yes`. The signing key expires on **2028-11-09** and must be renewed before then.
+
+The archive declares `Origin: tnim-xunil`, `Suite`/`Codename: zena`, and `Version: 22.3`. Derivative package versions use the `+disafronovYYYYMMDDHHMMSS` UTC suffix.
+
+## Repository structure
 
 ```text
 packages/
@@ -41,74 +141,21 @@ tnim-xunil.asc
     assign-pr.yml
 ```
 
-Each immediate child of `packages/` describes one source package. `scripts/detect_changes.py` selects affected packages from changed paths, or all packages for shared script/build-workflow changes. The build workflow uses that selection logic to build affected packages.
+## Maintenance
 
-## CI workflows
+### Package manifests
 
-- `build.yml` runs unit tests and builds affected packages on pull requests. The build job runs inside `linuxmintd/mint22.3-amd64:latest` on an Ubuntu 24.04 GitHub Actions runner. It restores cached APT downloads, updates the build environment, installs packaging tools, and uploads the resulting `.deb` artifacts.
-- `publish.yml` runs on relevant pushes to `main`, using the same Linux Mint container to rebuild packages and deploy the APT repository to GitHub Pages.
-- `assign-pr.yml` assigns unassigned pull requests. The `PR_ASSIGNEE` repository variable can override the default; it is required for organization-owned repositories.
+Each package manifest declares `source.package`, `source.version`, `source.format`, `maintainer.name`, `maintainer.email`, `build.distribution`, `build.version_suffix`, and `build.changelog_message`. To add another package, create its directory under `packages/`, define its manifest and ordered patch series, and let the build workflow validate it.
+
+### GitHub Actions
+
+- `build.yml` runs tests and builds affected packages on pull requests, restoring cached APT downloads and uploading `.deb` artifacts.
+- `publish.yml` publishes the signed APT archive on relevant pushes to `main`. It tracks the last published commit for incremental rebuilds.
+- `assign-pr.yml` assigns unassigned pull requests; `PR_ASSIGNEE` can override its default and is required for organization-owned repositories.
 - `.github/dependabot.yml` checks GitHub Actions dependencies daily.
 
-Each package manifest declares `source.package`, `source.version`, `source.format`, `maintainer.name`, `maintainer.email`, `build.distribution`, `build.version_suffix`, and `build.changelog_message`. The build script obtains the exact pinned source with `apt-get source` from the Linux Mint APT repositories, checks its package name, version, and source format, applies patches, updates maintainer metadata and the changelog, installs build dependencies, and builds with `dpkg-buildpackage`. It verifies the `Maintainer` field in each generated `.deb`.
+Configure **GitHub Pages → Build and deployment → Source: GitHub Actions**.
 
-## APT repository publication
+Publishing requires the `APT_SIGNING_KEY` GitHub Actions secret (ASCII-armored, unencrypted private key) and `APT_SIGNING_FINGERPRINT` Actions variable. The public key is committed as `tnim-xunil.asc` and published alongside the archive. The workflow does not commit binaries to `main` or use a separate promotion stage.
 
-`.github/workflows/publish.yml` runs on relevant pushes to `main`. It restores previously published binary packages from GitHub Pages, verifies their SHA256 checksums, and rebuilds only packages whose build inputs changed since the last published commit. During migration from the previous archive layout (without a published commit marker), it rebuilds all configured packages once. An empty APT index or HTTP 404 for `Packages.gz` means an empty archive and triggers a full build. If a binary referenced by the index returns HTTP 404, its source package is rebuilt from the current manifest. Other download errors and checksum mismatches fail publication. The archive retains the latest two Debian versions per binary package and architecture, generates a flat APT repository (`pool/`, `Packages`, `Packages.gz`, `Release`) using `dpkg-scanpackages --multiversion`, signs its Release metadata (`InRelease`, `Release.gpg`), validates signatures through APT, and deploys it to GitHub Pages. The published `index.html` redirects visitors to the [GitHub source repository](https://github.com/disafronov/tnim-xunil); APT metadata and package URLs remain directly accessible. Failed builds or validation do not replace the previously published site.
-
-Enable **GitHub Pages → Build and deployment → Source: GitHub Actions** in repository settings.
-
-### Install the signing key and configure APT
-
-The repository publishes its ASCII-armored OpenPGP public key as [tnim-xunil.asc](https://disafronov.github.io/tnim-xunil/tnim-xunil.asc).
-
-Key fingerprint:
-
-```text
-C1BB E193 86BE 4FA1 4113 DC22 970F 6970 CA2A 6BC0
-```
-
-Install the public key without converting its format:
-
-```sh
-sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://disafronov.github.io/tnim-xunil/tnim-xunil.asc | \
-  sudo tee /etc/apt/keyrings/tnim-xunil.asc > /dev/null
-sudo chmod 0644 /etc/apt/keyrings/tnim-xunil.asc
-gpg --show-keys --fingerprint /etc/apt/keyrings/tnim-xunil.asc
-```
-
-Verify that the fingerprint matches the value above before trusting the key. Then configure the source:
-
-```sh
-sudo tee /etc/apt/sources.list.d/tnim-xunil.list > /dev/null <<'EOF'
-deb [signed-by=/etc/apt/keyrings/tnim-xunil.asc] https://disafronov.github.io/tnim-xunil/ ./
-EOF
-```
-
-Replace any previous `trusted=yes` entry for this repository; do not keep both entries. Run `sudo apt update` after the signed repository has been published.
-
-To prioritize all packages from this repository, install an APT preferences rule:
-
-```sh
-sudo tee /etc/apt/preferences.d/tnim-xunil.pref > /dev/null <<'EOF'
-Package: *
-Pin: release o=tnim-xunil
-Pin-Priority: 1001
-EOF
-
-sudo apt update
-apt policy gnome-calendar
-```
-
-The rule applies to all packages in APT repositories declaring `Origin: tnim-xunil`
-in their `Release` metadata, not to every repository on the same host. A priority
-above 1000 also permits downgrades, so review proposed package changes.
-
-The published APT `Release` metadata identifies the archive as `tnim-xunil`
-(`Origin`), labels it `Dmitrii Safronov's Patched Packages`, and targets
-Linux Mint 22.3 Zena (`Suite`/`Codename: zena`, `Version: 22.3`).
-Its description is `Personal fixes for upstream bugs and annoyances`.
-Derivative package versions use `+disafronovYYYYMMDDHHMMSS` (UTC).
-
-The repository signs its APT Release metadata with a dedicated Ed25519 OpenPGP key. The publishing workflow requires the `APT_SIGNING_KEY` GitHub Actions secret (ASCII-armored private key, without a passphrase) and `APT_SIGNING_FINGERPRINT` Actions variable. The public key is committed as `tnim-xunil.asc` and published on GitHub Pages. The workflow verifies signatures and tests APT using `signed-by=` rather than `trusted=yes`. The signing key expires on 2028-11-09 and must be renewed before then. The workflow does not publish packages to `main` or create a separate promotion stage.
+The published `index.html` redirects visitors to the [source repository](https://github.com/disafronov/tnim-xunil/); APT metadata and package URLs remain directly accessible.
