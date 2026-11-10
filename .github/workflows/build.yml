@@ -23,15 +23,14 @@ jobs:
       - name: Run unit tests
         run: python3 -m unittest discover -s tests -v
 
-  detect:
+  build:
     runs-on: ubuntu-24.04
-    outputs:
-      matrix: ${{ steps.packages.outputs.matrix }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Detect changed packages
         id: packages
         shell: bash
@@ -41,34 +40,42 @@ jobs:
           set -euo pipefail
           merge_base="$(git merge-base "$BASE_SHA" HEAD)"
           git diff --name-only "$merge_base" HEAD > "$RUNNER_TEMP/changed-files"
-          matrix="$(python3 scripts/detect_changes.py --changed-files "$RUNNER_TEMP/changed-files")"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "Selected packages: $matrix"
+          python3 scripts/detect_changes.py --changed-files "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/matrix.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-  build:
-    needs: detect
-    if: ${{ needs.detect.outputs.matrix != '{"package":[]}' }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          temp = Path(os.environ["RUNNER_TEMP"])
+          packages = json.loads((temp / "matrix.json").read_text())["package"]
+          (temp / "packages-to-build").write_text(
+              "".join(f"{name}\n" for name in packages)
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"has_packages={'true' if packages else 'false'}", file=output)
+          print(f"Selected packages: {packages}")
+          PY
       - name: Install Debian packaging tools
+        if: steps.packages.outputs.has_packages == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential devscripts equivs dpkg-dev patch python3-yaml
-      - name: Build package from manifest
+      - name: Build changed packages
+        if: steps.packages.outputs.has_packages == 'true'
+        shell: bash
         run: |
-          /usr/bin/python3 scripts/build_package.py \
-            "packages/${{ matrix.package }}" "$RUNNER_TEMP/debs"
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/debs"
+          while IFS= read -r package; do
+            [[ -n "$package" ]] || continue
+            /usr/bin/python3 scripts/build_package.py \
+              "packages/$package" "$RUNNER_TEMP/debs"
+          done < "$RUNNER_TEMP/packages-to-build"
       - name: Upload DEB artifacts
+        if: steps.packages.outputs.has_packages == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package }}-debs
+          name: debian-packages
           path: ${{ runner.temp }}/debs/*.deb
           if-no-files-found: error
