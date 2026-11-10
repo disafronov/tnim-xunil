@@ -80,8 +80,10 @@ gpg --show-keys --fingerprint /etc/apt/keyrings/tnim-xunil.asc
 
 Verify that the fingerprint matches the value above before trusting the key. Then configure the source:
 
-```text
+```sh
+sudo tee /etc/apt/sources.list.d/tnim-xunil.list > /dev/null <<'EOF'
 deb [signed-by=/etc/apt/keyrings/tnim-xunil.asc] https://disafronov.github.io/tnim-xunil/ ./
+EOF
 ```
 
 Replace any previous `trusted=yes` entry for this repository; do not keep both entries. Run `sudo apt update` after the signed repository has been published.
