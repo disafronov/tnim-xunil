@@ -25,6 +25,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Detect runner distribution
+        id: distro
+        shell: bash
+        run: |
+          . /etc/os-release
+          echo "cache-prefix=apt-${{ runner.os }}-${{ runner.arch }}-${ID}-${VERSION_ID}-" >> "$GITHUB_OUTPUT"
       - name: Configure APT package archive
         shell: bash
         run: |
@@ -36,9 +42,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives/*.deb
-          key: apt-ubuntu-24.04-${{ github.sha }}
+          key: ${{ steps.distro.outputs.cache-prefix }}${{ github.sha }}
           restore-keys: |
-            apt-ubuntu-24.04-
+            ${{ steps.distro.outputs.cache-prefix }}
       - name: Install packaging tools
         run: |
           sudo apt-get update
