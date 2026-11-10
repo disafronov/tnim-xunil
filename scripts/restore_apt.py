@@ -29,7 +29,7 @@ def records(index):
         yield fields
 
 
-def restore(base_url, destination):
+def restore(base_url, destination, missing_sources=None):
     base_url = base_url.rstrip("/") + "/"
     destination.mkdir(parents=True, exist_ok=True)
     # Missing index means an empty archive; other download errors remain fatal.
@@ -42,6 +42,7 @@ def restore(base_url, destination):
     else:
         index = gzip.decompress(raw).decode("utf-8")
     seen = set()
+    missing = set()
     for item in records(index):
         name = item["Filename"]
         path = PurePosixPath(name)
@@ -50,7 +51,15 @@ def restore(base_url, destination):
         if name in seen:
             raise ValueError(f"Duplicate package filename: {name}")
         seen.add(name)
-        payload = fetch(urllib.parse.urljoin(base_url, name))
+        try:
+            payload = fetch(urllib.parse.urljoin(base_url, name))
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            # A missing binary is rebuilt from the current source manifest.
+            source = item.get("Source", item["Package"]).split(" (", 1)[0]
+            missing.add(source)
+            continue
         if len(payload) != int(item["Size"]):
             raise ValueError(f"Size mismatch: {name}")
         if hashlib.sha256(payload).hexdigest() != item["SHA256"]:
@@ -58,6 +67,8 @@ def restore(base_url, destination):
         target = destination / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
+    if missing_sources is not None:
+        missing_sources.write_text("".join(f"{source}\n" for source in sorted(missing)))
     # The state file is optional only during migration from the old layout.
     try:
         state = fetch(urllib.parse.urljoin(base_url, ".published-commit")).decode().strip()
@@ -74,8 +85,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("url")
     parser.add_argument("directory", type=Path)
+    parser.add_argument("--missing-sources", type=Path)
     args = parser.parse_args()
-    print(restore(args.url, args.directory))
+    print(restore(args.url, args.directory, args.missing_sources))
 
 
 if __name__ == "__main__":
