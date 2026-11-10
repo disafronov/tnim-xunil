@@ -4,6 +4,8 @@ import argparse
 import time
 import gzip
 import hashlib
+import subprocess
+import tempfile
 from pathlib import Path, PurePosixPath
 import urllib.error
 import urllib.parse
@@ -25,6 +27,38 @@ def fetch(url):
             time.sleep(2 ** attempt)
 
 
+def verify_index(index, inrelease, public_key):
+    with tempfile.TemporaryDirectory() as directory:
+        directory = Path(directory)
+        keyring = directory / "keyring.gpg"
+        signed = directory / "InRelease"
+        subprocess.run(
+            ["gpg", "--batch", "--yes", "--dearmor", "--output", str(keyring), str(public_key)],
+            check=True,
+        )
+        signed.write_bytes(inrelease)
+        subprocess.run(["gpgv", "--keyring", str(keyring), str(signed)], check=True)
+
+    # Read the cleartext-signed Release fields, including the SHA256 table.
+    release = inrelease.split(b"\n\n", 1)[1].split(b"\n-----BEGIN PGP SIGNATURE-----", 1)[0]
+    lines = release.decode("utf-8").splitlines()
+    digest = hashlib.sha256(index).hexdigest()
+    matches = []
+    in_sha256 = False
+    for line in lines:
+        if line == "SHA256:":
+            in_sha256 = True
+            continue
+        if in_sha256 and not line.startswith(" "):
+            in_sha256 = False
+        if in_sha256:
+            parts = line.split()
+            if len(parts) == 3 and parts[2] == "Packages.gz":
+                matches.append((parts[0], parts[1]))
+    if len(matches) != 1 or matches[0] != (digest, str(len(index))):
+        raise ValueError("Packages.gz does not match signed Release SHA256 metadata")
+
+
 def records(index):
     for block in index.split("\n\n"):
         if not block.strip():
@@ -38,7 +72,7 @@ def records(index):
         yield fields
 
 
-def restore(base_url, destination, missing_sources=None):
+def restore(base_url, destination, missing_sources=None, public_key=None):
     base_url = base_url.rstrip("/") + "/"
     destination.mkdir(parents=True, exist_ok=True)
     # Missing index means an empty archive; other download errors remain fatal.
@@ -51,6 +85,9 @@ def restore(base_url, destination, missing_sources=None):
         index = ""
         index_missing = True
     else:
+        if public_key is None:
+            raise ValueError("Public signing key required to restore an existing archive")
+        verify_index(raw, fetch(urllib.parse.urljoin(base_url, "InRelease")), public_key)
         index = gzip.decompress(raw).decode("utf-8")
     seen = set()
     missing = set()
@@ -102,8 +139,9 @@ def main():
     parser.add_argument("url")
     parser.add_argument("directory", type=Path)
     parser.add_argument("--missing-sources", type=Path)
+    parser.add_argument("--public-key", type=Path, default=Path("tnim-xunil.asc"))
     args = parser.parse_args()
-    print(restore(args.url, args.directory, args.missing_sources))
+    print(restore(args.url, args.directory, args.missing_sources, args.public_key))
 
 
 if __name__ == "__main__":
