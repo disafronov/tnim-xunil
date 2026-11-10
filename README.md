@@ -33,6 +33,7 @@ scripts/
   restore_apt.py
   prune_apt.py
 index.html
+tnim-xunil.asc
 .github/
   workflows/
     build.yml
@@ -53,13 +54,37 @@ Each package manifest declares `source.package`, `source.version`, `source.forma
 
 ## APT repository publication
 
-`.github/workflows/publish.yml` runs on relevant pushes to `main`. It restores previously published binary packages from GitHub Pages, verifies their SHA256 checksums, and rebuilds only packages whose build inputs changed since the last published commit. During migration from the previous archive layout (without a published commit marker), it rebuilds all configured packages once. An empty APT index or HTTP 404 for `Packages.gz` means an empty archive and triggers a full build. If a binary referenced by the index returns HTTP 404, its source package is rebuilt from the current manifest. Other download errors and checksum mismatches fail publication. The archive retains the latest two Debian versions per binary package and architecture, generates a flat APT repository (`pool/`, `Packages`, `Packages.gz`, `Release`) using `dpkg-scanpackages --multiversion`, validates it through APT, and deploys it to GitHub Pages. The published `index.html` redirects visitors to the [GitHub source repository](https://github.com/disafronov/tnim-xunil); APT metadata and package URLs remain directly accessible. Failed builds or validation do not replace the previously published site.
+`.github/workflows/publish.yml` runs on relevant pushes to `main`. It restores previously published binary packages from GitHub Pages, verifies their SHA256 checksums, and rebuilds only packages whose build inputs changed since the last published commit. During migration from the previous archive layout (without a published commit marker), it rebuilds all configured packages once. An empty APT index or HTTP 404 for `Packages.gz` means an empty archive and triggers a full build. If a binary referenced by the index returns HTTP 404, its source package is rebuilt from the current manifest. Other download errors and checksum mismatches fail publication. The archive retains the latest two Debian versions per binary package and architecture, generates a flat APT repository (`pool/`, `Packages`, `Packages.gz`, `Release`) using `dpkg-scanpackages --multiversion`, signs its Release metadata (`InRelease`, `Release.gpg`), validates signatures through APT, and deploys it to GitHub Pages. The published `index.html` redirects visitors to the [GitHub source repository](https://github.com/disafronov/tnim-xunil); APT metadata and package URLs remain directly accessible. Failed builds or validation do not replace the previously published site.
 
-Enable **GitHub Pages → Build and deployment → Source: GitHub Actions** in repository settings. Once deployed, configure APT with:
+Enable **GitHub Pages → Build and deployment → Source: GitHub Actions** in repository settings.
+
+### Install the signing key and configure APT
+
+The repository publishes its ASCII-armored OpenPGP public key as [tnim-xunil.asc](https://disafronov.github.io/tnim-xunil/tnim-xunil.asc).
+
+Key fingerprint:
 
 ```text
-deb [trusted=yes] https://disafronov.github.io/tnim-xunil/ ./
+C1BB E193 86BE 4FA1 4113 DC22 970F 6970 CA2A 6BC0
 ```
+
+Install the public key without converting its format:
+
+```sh
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://disafronov.github.io/tnim-xunil/tnim-xunil.asc | \
+  sudo tee /etc/apt/keyrings/tnim-xunil.asc > /dev/null
+sudo chmod 0644 /etc/apt/keyrings/tnim-xunil.asc
+gpg --show-keys --fingerprint /etc/apt/keyrings/tnim-xunil.asc
+```
+
+Verify that the fingerprint matches the value above before trusting the key. Then configure the source:
+
+```text
+deb [signed-by=/etc/apt/keyrings/tnim-xunil.asc] https://disafronov.github.io/tnim-xunil/ ./
+```
+
+Replace any previous `trusted=yes` entry for this repository; do not keep both entries. Run `sudo apt update` after the signed repository has been published.
 
 To prioritize all packages from this repository, install an APT preferences rule:
 
@@ -84,4 +109,4 @@ Linux Mint 22.3 Zena (`Suite`/`Codename: zena`, `Version: 22.3`).
 Its description is `Personal fixes for upstream bugs and annoyances`.
 Derivative package versions use `+disafronovYYYYMMDDHHMMSS` (UTC).
 
-The repository is **unsigned**: `trusted=yes` explicitly disables APT signature verification for this source. Use it only if you trust the repository owner and GitHub Pages delivery. Signing and key distribution are not implemented. The workflow does not publish packages to `main` or create a separate promotion stage.
+The repository signs its APT Release metadata with a dedicated Ed25519 OpenPGP key. The publishing workflow requires the `APT_SIGNING_KEY` GitHub Actions secret (ASCII-armored private key, without a passphrase) and `APT_SIGNING_FINGERPRINT` Actions variable. The public key is committed as `tnim-xunil.asc` and published on GitHub Pages. The workflow verifies signatures and tests APT using `signed-by=` rather than `trusted=yes`. The signing key expires on 2028-11-09 and must be renewed before then. The workflow does not publish packages to `main` or create a separate promotion stage.
