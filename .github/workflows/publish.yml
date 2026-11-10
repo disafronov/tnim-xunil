@@ -135,6 +135,12 @@ jobs:
           elif ! git diff --quiet "$PUBLISHED_SHA" HEAD -- index.html tnim-xunil.asc .github/workflows/publish.yml scripts/prune_apt.py; then
             publish=true
           fi
+          if [[ "$publish" == false ]]; then
+            # Verify the files not covered by the signed package index.
+            /usr/bin/python3 scripts/check_published_files.py \
+              https://disafronov.github.io/tnim-xunil/ \
+              --public-key tnim-xunil.asc --index-html index.html || publish=true
+          fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "Publish repository: $publish"
       - name: Build changed packages
