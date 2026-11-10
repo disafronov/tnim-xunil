@@ -66,7 +66,7 @@ To prioritize all packages from this repository, install an APT preferences rule
 ```sh
 sudo tee /etc/apt/preferences.d/tnim-xunil.pref > /dev/null <<'EOF'
 Package: *
-Pin: origin disafronov.github.io
+Pin: release o=tnim-xunil
 Pin-Priority: 1001
 EOF
 
@@ -74,7 +74,8 @@ sudo apt update
 apt policy gnome-calendar
 ```
 
-The rule applies to all packages from `disafronov.github.io`. A priority
+The rule applies to all packages in APT repositories declaring `Origin: tnim-xunil`
+in their `Release` metadata, not to every repository on the same host. A priority
 above 1000 also permits downgrades, so review proposed package changes.
 
 The published APT `Release` metadata identifies the archive as `tnim-xunil`
