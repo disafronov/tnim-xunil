@@ -32,9 +32,15 @@ def records(index):
 def restore(base_url, destination):
     base_url = base_url.rstrip("/") + "/"
     destination.mkdir(parents=True, exist_ok=True)
-    # A successful empty Packages index is valid; a missing index is not.
-    raw = fetch(urllib.parse.urljoin(base_url, "Packages.gz"))
-    index = gzip.decompress(raw).decode("utf-8")
+    # Missing index means an empty archive; other download errors remain fatal.
+    try:
+        raw = fetch(urllib.parse.urljoin(base_url, "Packages.gz"))
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        index = ""
+    else:
+        index = gzip.decompress(raw).decode("utf-8")
     seen = set()
     for item in records(index):
         name = item["Filename"]
