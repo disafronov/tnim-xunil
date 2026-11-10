@@ -61,6 +61,22 @@ Enable **GitHub Pages → Build and deployment → Source: GitHub Actions** in r
 deb [trusted=yes] https://disafronov.github.io/tnim-xunil/ ./
 ```
 
+To prioritize all packages from this repository, install an APT preferences rule:
+
+```sh
+sudo tee /etc/apt/preferences.d/tnim-xunil.pref > /dev/null <<'EOF'
+Package: *
+Pin: origin disafronov.github.io
+Pin-Priority: 1001
+EOF
+
+sudo apt update
+apt policy gnome-calendar
+```
+
+The rule applies to all packages from `disafronov.github.io`. A priority
+above 1000 also permits downgrades, so review proposed package changes.
+
 The published APT `Release` metadata identifies the archive as `tnim-xunil`
 (`Origin`), labels it `Dmitrii Safronov's Patched Packages`, and targets
 Linux Mint 22.3 Zena (`Suite`/`Codename: zena`, `Version: 22.3`).
