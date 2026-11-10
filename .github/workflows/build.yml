@@ -55,6 +55,13 @@ jobs:
               print(f"has_packages={'true' if packages else 'false'}", file=output)
           print(f"Selected packages: {packages}")
           PY
+      - name: Detect runner distribution
+        id: distro
+        if: steps.packages.outputs.has_packages == 'true'
+        shell: bash
+        run: |
+          . /etc/os-release
+          echo "cache-prefix=apt-${{ runner.os }}-${{ runner.arch }}-${ID}-${VERSION_ID}-" >> "$GITHUB_OUTPUT"
       - name: Configure APT package archive
         if: steps.packages.outputs.has_packages == 'true'
         shell: bash
@@ -68,9 +75,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/apt-archives/*.deb
-          key: apt-ubuntu-24.04-${{ github.sha }}
+          key: ${{ steps.distro.outputs.cache-prefix }}${{ github.sha }}
           restore-keys: |
-            apt-ubuntu-24.04-
+            ${{ steps.distro.outputs.cache-prefix }}
       - name: Install Debian packaging tools
         if: steps.packages.outputs.has_packages == 'true'
         run: |
