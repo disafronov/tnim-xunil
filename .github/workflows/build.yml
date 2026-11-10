@@ -72,7 +72,7 @@ jobs:
             "$RUNNER_TEMP/apt-archives" | sudo tee /etc/apt/apt.conf.d/99-ci-package-cache > /dev/null
       - name: Restore APT downloads
         if: steps.packages.outputs.has_packages == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/apt-archives/*.deb
           key: ${{ steps.distro.outputs.cache-prefix }}${{ github.sha }}

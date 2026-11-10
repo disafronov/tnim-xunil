@@ -39,7 +39,7 @@ jobs:
           printf 'Dir::Cache::archives "%s";\nAPT::Keep-Downloaded-Packages "true";\n' \
             "$RUNNER_TEMP/apt-archives" | sudo tee /etc/apt/apt.conf.d/99-ci-package-cache > /dev/null
       - name: Restore APT downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/apt-archives/*.deb
           key: ${{ steps.distro.outputs.cache-prefix }}${{ github.sha }}
