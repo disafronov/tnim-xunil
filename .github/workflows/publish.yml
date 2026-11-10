@@ -35,9 +35,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Missing or corrupt Packages.gz is a hard error, not an empty archive.
+          # A missing index means an empty archive; corrupt downloads are fatal.
           python3 scripts/restore_apt.py \
             https://disafronov.github.io/tnim-xunil/ "$RUNNER_TEMP/site" \
+            --missing-sources "$RUNNER_TEMP/missing-sources" \
             > "$RUNNER_TEMP/published-sha"
           sha="$(cat "$RUNNER_TEMP/published-sha")"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -75,6 +76,25 @@ jobs:
           )
           PY
           fi
+          # Rebuild any source whose published binary has disappeared.
+          /usr/bin/python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import yaml
+
+          root = Path("packages")
+          temp = Path(os.environ["RUNNER_TEMP"])
+          rebuild = set((temp / "rebuild").read_text().splitlines())
+          sources = {}
+          for manifest in root.glob("*/package.yaml"):
+              source = yaml.safe_load(manifest.read_text())["source"]["package"]
+              sources[source] = str(manifest.parent)
+          for source in (temp / "missing-sources").read_text().splitlines():
+              if source not in sources:
+                  raise ValueError(f"No source manifest for missing binary: {source}")
+              rebuild.add(sources[source])
+          (temp / "rebuild").write_text("".join(f"{name}\n" for name in sorted(rebuild)))
+          PY
           echo "Packages selected for rebuild:"
           cat "$RUNNER_TEMP/rebuild"
       - name: Build changed packages
