@@ -33,7 +33,7 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="deb-build-") as temp:
         root = Path(temp)
-        run("dget", "-u", "-x", source["dsc"], cwd=root)
+        run("apt-get", "source", f'{source["package"]}={source["version"]}', cwd=root)
         trees = [p for p in root.iterdir() if p.is_dir() and (p / "debian/control").is_file()]
         if len(trees) != 1:
             raise RuntimeError(f"Expected one extracted Debian source tree, got {trees}")
