@@ -19,6 +19,12 @@ concurrency:
 
 jobs:
   publish:
+    container:
+      image: linuxmintd/mint22.3-amd64:latest
+      options: --security-opt seccomp=unconfined
+    defaults:
+      run:
+        shell: bash
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -47,9 +53,11 @@ jobs:
             ${{ steps.distro.outputs.cache-prefix }}
       - name: Install packaging tools
         run: |
+          echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
           sudo apt-get update
+          sudo apt-get -y dist-upgrade
           sudo apt-get install -y --no-install-recommends \
-            build-essential devscripts equivs dpkg-dev patch python3-yaml apt-utils
+            equivs patch python3-yaml apt-utils
       - name: Restore published packages
         id: restore
         shell: bash
@@ -82,7 +90,7 @@ jobs:
           from pathlib import Path
           path = Path(os.environ["RUNNER_TEMP"], "changed-files")
           changed = path.read_text().splitlines()
-          path.write_text("\n".join(p for p in changed if p.startswith("packages/") or p == "scripts/build_package.py") + "\n")
+          path.write_text("\n".join(p for p in changed if p.startswith("packages/") or p == "scripts/build_package.py" or p == ".github/workflows/publish.yml" or p == ".github/workflows/build.yml") + "\n")
           PY
             python3 scripts/detect_changes.py \
               --changed-files "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/matrix.json"
