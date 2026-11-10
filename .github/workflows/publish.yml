@@ -169,7 +169,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/index.html" index.html
           cp "$GITHUB_WORKSPACE/tnim-xunil.asc" tnim-xunil.asc
           touch .nojekyll
-          printf '%s\n' "$GITHUB_SHA" > .published-commit
+          printf '%s\n' "$GITHUB_SHA" > published-commit
           test -s Packages.gz
           test -s Release
           while IFS= read -r deb; do
