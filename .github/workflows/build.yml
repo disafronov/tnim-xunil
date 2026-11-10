@@ -24,6 +24,12 @@ jobs:
         run: python3 -m unittest discover -s tests -v
 
   build:
+    container:
+      image: linuxmintd/mint22.3-amd64:latest
+      options: --security-opt seccomp=unconfined
+    defaults:
+      run:
+        shell: bash
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -81,9 +87,11 @@ jobs:
       - name: Install Debian packaging tools
         if: steps.packages.outputs.has_packages == 'true'
         run: |
+          echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
           sudo apt-get update
+          sudo apt-get -y dist-upgrade
           sudo apt-get install -y --no-install-recommends \
-            build-essential devscripts equivs dpkg-dev patch python3-yaml
+            equivs patch python3-yaml
       - name: Build changed packages
         if: steps.packages.outputs.has_packages == 'true'
         shell: bash
