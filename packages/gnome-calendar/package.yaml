@@ -10,5 +10,5 @@ maintainer:
   email: dhameoelin@gmail.com
 build:
   distribution: zara
-  version_suffix: "+my"
+  version_suffix: "+disafronov"
   changelog_message: Apply locally maintained gnome-calendar fixes.
