@@ -55,6 +55,14 @@ jobs:
             git cat-file -e "$PUBLISHED_SHA^{commit}"
             git merge-base --is-ancestor "$PUBLISHED_SHA" HEAD
             git diff --name-only "$PUBLISHED_SHA" HEAD > "$RUNNER_TEMP/changed-files"
+            # Only build inputs trigger package recompilation.
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+          path = Path(os.environ["RUNNER_TEMP"], "changed-files")
+          changed = path.read_text().splitlines()
+          path.write_text("\\n".join(p for p in changed if p.startswith("packages/") or p == "scripts/build_package.py") + "\\n")
+          PY
             python3 scripts/detect_changes.py \
               --changed-files "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/matrix.json"
             python3 - <<'PY'
