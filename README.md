@@ -28,12 +28,6 @@ This is a third-party APT repository. Review its packages and signing key before
 
 The repository publishes its ASCII-armored OpenPGP public key as [`tnim-xunil.asc`](https://disafronov.github.io/tnim-xunil/tnim-xunil.asc).
 
-Expected fingerprint:
-
-```text
-C1BB E193 86BE 4FA1 4113 DC22 970F 6970 CA2A 6BC0
-```
-
 Install the key without converting its format:
 
 ```sh
@@ -41,10 +35,7 @@ sudo install -d -m 0755 /etc/apt/keyrings
 curl -fsSL https://disafronov.github.io/tnim-xunil/tnim-xunil.asc | \
   sudo tee /etc/apt/keyrings/tnim-xunil.asc > /dev/null
 sudo chmod 0644 /etc/apt/keyrings/tnim-xunil.asc
-gpg --show-keys --fingerprint /etc/apt/keyrings/tnim-xunil.asc
 ```
-
-Verify the fingerprint against the value above before trusting the key.
 
 ### APT source
 
@@ -156,6 +147,6 @@ Each package manifest declares `source.package`, `source.version`, `source.forma
 
 Configure **GitHub Pages → Build and deployment → Source: GitHub Actions**.
 
-Publishing requires the `APT_SIGNING_KEY` GitHub Actions secret (ASCII-armored, unencrypted private key) and `APT_SIGNING_FINGERPRINT` Actions variable. The public key is committed as `tnim-xunil.asc` and published alongside the archive. The workflow does not commit binaries to `main` or use a separate promotion stage.
+Publishing requires the `APT_SIGNING_KEY` GitHub Actions secret (ASCII-armored, unencrypted private key). The workflow derives the signing fingerprint from `tnim-xunil.asc` and checks that the imported private key matches it. The public key is committed as `tnim-xunil.asc` and published alongside the archive. The workflow does not commit binaries to `main` or use a separate promotion stage.
 
 The published `index.html` redirects visitors to the [source repository](https://github.com/disafronov/tnim-xunil/); APT metadata and package URLs remain directly accessible.
