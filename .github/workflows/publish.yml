@@ -1,18 +1,12 @@
 name: Publish APT repository
 
 on:
-  pull_request:
-    paths:
-      - packages/**
-      - scripts/**
-      - .github/workflows/publish.yml
   push:
     branches: [main]
     paths:
       - packages/**
       - scripts/**
       - .github/workflows/publish.yml
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,32 +23,78 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Install packaging tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential devscripts equivs dpkg-dev patch python3-yaml apt-utils
-      - name: Build all configured packages
+      - name: Restore published packages
+        id: restore
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/debs"
-          count=0
-          while IFS= read -r manifest; do
-            /usr/bin/python3 scripts/build_package.py \
-              "$(dirname "$manifest")" "$RUNNER_TEMP/debs"
-            count=$((count + 1))
-          done < <(find packages -mindepth 2 -maxdepth 2 -name package.yaml -print | sort)
-          test "$count" -gt 0
-      - name: Generate APT metadata
+          # Missing or corrupt Packages.gz is a hard error, not an empty archive.
+          python3 scripts/restore_apt.py \
+            https://disafronov.github.io/tnim-xunil/ "$RUNNER_TEMP/site" \
+            > "$RUNNER_TEMP/published-sha"
+          sha="$(cat "$RUNNER_TEMP/published-sha")"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Determine packages to rebuild
+        id: changed
+        shell: bash
+        env:
+          PUBLISHED_SHA: ${{ steps.restore.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$PUBLISHED_SHA" ]]; then
+            # One-time migration: existing archive predates the state marker.
+            find packages -mindepth 2 -maxdepth 2 -name package.yaml -printf '%h\n' | sort > "$RUNNER_TEMP/rebuild"
+          else
+            git cat-file -e "$PUBLISHED_SHA^{commit}"
+            git merge-base --is-ancestor "$PUBLISHED_SHA" HEAD
+            git diff --name-only "$PUBLISHED_SHA" HEAD > "$RUNNER_TEMP/changed-files"
+            python3 scripts/detect_changes.py \
+              --changed-files "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/matrix.json"
+            python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          matrix = json.loads(Path(os.environ["RUNNER_TEMP"], "matrix.json").read_text())
+          Path(os.environ["RUNNER_TEMP"], "rebuild").write_text(
+              "".join(f"packages/{name}\n" for name in matrix["package"])
+          )
+          PY
+          fi
+          echo "Packages selected for rebuild:"
+          cat "$RUNNER_TEMP/rebuild"
+      - name: Build changed packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/debs" "$RUNNER_TEMP/site/pool"
+          while IFS= read -r package_dir; do
+            [[ -n "$package_dir" ]] || continue
+            /usr/bin/python3 scripts/build_package.py "$package_dir" "$RUNNER_TEMP/debs"
+          done < "$RUNNER_TEMP/rebuild"
+          shopt -s nullglob
+          for deb in "$RUNNER_TEMP"/debs/*.deb; do
+            target="$RUNNER_TEMP/site/pool/$(basename "$deb")"
+            if [[ -e "$target" ]] && ! cmp -s "$deb" "$target"; then
+              echo "Refusing to replace an existing package: $target" >&2
+              exit 1
+            fi
+            cp "$deb" "$target"
+          done
+      - name: Retain two versions and generate APT metadata
         shell: bash
         run: |
           set -euo pipefail
           repo="$RUNNER_TEMP/site"
-          mkdir -p "$repo/pool"
-          cp "$RUNNER_TEMP"/debs/*.deb "$repo/pool/"
+          python3 scripts/prune_apt.py "$repo/pool" --keep 2
           cd "$repo"
-          dpkg-scanpackages pool /dev/null > Packages
+          dpkg-scanpackages --multiversion pool /dev/null > Packages
           gzip -n -9 -c Packages > Packages.gz
           apt-ftparchive \
             -o 'APT::FTPArchive::Release::Origin=tnim-xunil' \
@@ -70,9 +110,9 @@ jobs:
           grep -Fxq 'Version: 22.3' Release
           grep -Fxq 'Description: Personal fixes for upstream bugs and annoyances' Release
           touch .nojekyll
+          printf '%s\n' "$GITHUB_SHA" > .published-commit
           test -s Packages.gz
           test -s Release
-          test "$(grep -c '^Package: ' Packages)" -gt 0
           while IFS= read -r deb; do
             name="$(dpkg-deb -f "$deb" Package)"
             grep -Fxq "Package: $name" Packages
@@ -95,13 +135,10 @@ jobs:
           path: ${{ runner.temp }}/site/
           include-hidden-files: true
       - name: Configure Pages
-        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
-        if: github.event_name != 'pull_request'
         with:
           path: ${{ runner.temp }}/site
       - name: Deploy GitHub Pages
-        if: github.event_name != 'pull_request'
         id: deployment
         uses: actions/deploy-pages@v4
