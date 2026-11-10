@@ -9,8 +9,6 @@ import yaml
 
 
 def maintained_sources(packages_root: Path) -> set[str]:
-    if not packages_root.is_dir():
-        raise FileNotFoundError(f"Missing packages directory: {packages_root}")
     sources = set()
     for manifest in sorted(packages_root.glob("*/package.yaml")):
         source = yaml.safe_load(manifest.read_text())["source"]["package"]
