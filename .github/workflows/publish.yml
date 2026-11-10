@@ -108,7 +108,12 @@ jobs:
           )
           PY
           fi
-          # Rebuild any source whose published binary has disappeared.
+          # Drop binaries belonging to sources no longer present in manifests.
+          mkdir -p "$RUNNER_TEMP/site/pool"
+          python3 -m scripts.reconcile_apt "$RUNNER_TEMP/site/pool" > "$RUNNER_TEMP/removed-binaries"
+          echo "Removed binaries from unmaintained sources:"
+          cat "$RUNNER_TEMP/removed-binaries"
+          # Rebuild any maintained source whose published binary has disappeared.
           /usr/bin/python3 - <<'PY'
           import os
           from pathlib import Path
@@ -122,15 +127,14 @@ jobs:
               source = yaml.safe_load(manifest.read_text())["source"]["package"]
               sources[source] = str(manifest.parent)
           for source in (temp / "missing-sources").read_text().splitlines():
-              if source not in sources:
-                  raise ValueError(f"No source manifest for missing binary: {source}")
-              rebuild.add(sources[source])
+              if source in sources:
+                  rebuild.add(sources[source])
           (temp / "rebuild").write_text("".join(f"{name}\n" for name in sorted(rebuild)))
           PY
           echo "Packages selected for rebuild:"
           cat "$RUNNER_TEMP/rebuild"
           publish=false
-          if [[ -s "$RUNNER_TEMP/rebuild" || -z "$PUBLISHED_SHA" ]]; then
+          if [[ -s "$RUNNER_TEMP/rebuild" || -s "$RUNNER_TEMP/removed-binaries" || -z "$PUBLISHED_SHA" ]]; then
             publish=true
           elif ! git diff --quiet "$PUBLISHED_SHA" HEAD -- index.html tnim-xunil.asc .github/workflows/publish.yml scripts/prune_apt.py; then
             publish=true
