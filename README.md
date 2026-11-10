@@ -14,7 +14,7 @@ Three local fixes are stored as ordered unified-diff patches in `packages/gnome-
 2. `0002-sort-agenda-events.patch`: sort single-day agenda events chronologically.
 3. `0003-diff-timeline-events.patch`: compare timeline event membership when the visible range changes.
 
-The application order is defined by `patches/series`. GitHub Actions has successfully downloaded the pinned Mint source and applied all three patches. Patch application was verified in CI. The user also successfully downloaded the first built artifact and opened it for installation; runtime behavior is not yet established.
+The application order is defined by `patches/series`. The package build downloads the pinned Mint source and applies all three patches. Patch application is verified as part of the package build. The user also successfully downloaded the first built artifact and opened it for installation; runtime behavior is not yet established.
 
 ## Repository layout
 
@@ -32,7 +32,6 @@ scripts/
   build_package.py
 .github/
   workflows/
-    verify-gnome-calendar-patches.yml
     build.yml
     publish.yml
     assign-pr.yml
@@ -42,7 +41,6 @@ Each immediate child of `packages/` describes one source package. `scripts/detec
 
 ## CI workflows
 
-- `verify-gnome-calendar-patches.yml` runs on relevant pull requests and can be dispatched manually. It downloads the pinned Linux Mint source and applies the ordered patches. Its first run passed.
 - `build.yml` runs on pull requests changing package files, shared scripts, or the build workflow; manual dispatch builds all packages. A detection job compares the pull request head against its base and passes the selected package names to a matrix. Each matrix job invokes `scripts/build_package.py` with its package directory. The script reads `package.yaml`, downloads and validates the pinned source, applies the patch series, sets derivative maintainer metadata, creates a local Debian changelog revision, installs build dependencies, builds with `dpkg-buildpackage`, and verifies the resulting `.deb` metadata before upload. The first build produced a downloadable artifact. The current revision additionally checks the resulting Debian `Maintainer` field.
 - `assign-pr.yml` assigns unassigned pull requests. The `PR_ASSIGNEE` repository variable can override the default; it is required for organization-owned repositories.
 - `.github/dependabot.yml` checks GitHub Actions dependencies daily.
