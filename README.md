@@ -30,6 +30,8 @@ packages/
 scripts/
   detect_changes.py
   build_package.py
+  restore_apt.py
+  prune_apt.py
 .github/
   workflows/
     build.yml
@@ -37,11 +39,11 @@ scripts/
     assign-pr.yml
 ```
 
-Each immediate child of `packages/` describes one source package. `scripts/detect_changes.py` selects affected packages from changed paths, or all packages for shared script/build-workflow changes. The build workflow uses that selection logic to generate a per-package build matrix. On manual dispatch, all packages are selected.
+Each immediate child of `packages/` describes one source package. `scripts/detect_changes.py` selects affected packages from changed paths, or all packages for shared script/build-workflow changes. The build workflow uses that selection logic to generate a per-package build matrix.
 
 ## CI workflows
 
-- `build.yml` runs on pull requests changing package files, shared scripts, or the build workflow; manual dispatch builds all packages. A detection job compares the pull request head against its base and passes the selected package names to a matrix. Each matrix job invokes `scripts/build_package.py` with its package directory. The script reads `package.yaml`, downloads and validates the pinned source, applies the patch series, sets derivative maintainer metadata, creates a local Debian changelog revision, installs build dependencies, builds with `dpkg-buildpackage`, and verifies the resulting `.deb` metadata before upload. The first build produced a downloadable artifact. The current revision additionally checks the resulting Debian `Maintainer` field.
+- `build.yml` runs on pull requests changing package files, shared scripts, or the build workflow; A detection job compares the pull request head against its base and passes the selected package names to a matrix. Each matrix job invokes `scripts/build_package.py` with its package directory. The script reads `package.yaml`, downloads and validates the pinned source, applies the patch series, sets derivative maintainer metadata, creates a local Debian changelog revision, installs build dependencies, builds with `dpkg-buildpackage`, and verifies the resulting `.deb` metadata before upload. The first build produced a downloadable artifact. The current revision additionally checks the resulting Debian `Maintainer` field.
 - `assign-pr.yml` assigns unassigned pull requests. The `PR_ASSIGNEE` repository variable can override the default; it is required for organization-owned repositories.
 - `.github/dependabot.yml` checks GitHub Actions dependencies daily.
 
@@ -51,7 +53,7 @@ Source retrieval currently uses `dget -u -x`: archive checksums are checked agai
 
 ## APT repository publication
 
-`.github/workflows/publish.yml` builds **all** configured packages from their pinned manifests on changes to `main` affecting `packages/`, `scripts/`, or the publication workflow, and on manual dispatch. Building all packages avoids dropping unchanged packages from the published repository. It generates a flat APT repository (`pool/`, `Packages`, `Packages.gz`, `Release`) and deploys it to GitHub Pages. The build must succeed before deployment; an unsuccessful build does not replace the previously published site.
+`.github/workflows/publish.yml` runs on relevant pushes to `main`. It restores previously published binary packages from GitHub Pages, verifies their SHA256 checksums, and rebuilds only packages whose build inputs changed since the last published commit. During migration from the previous archive layout (without a published commit marker), it rebuilds all configured packages once. A successfully fetched empty APT index is valid; an unavailable or corrupt index fails the publication. The archive retains the latest two Debian versions per binary package and architecture, generates a flat APT repository (`pool/`, `Packages`, `Packages.gz`, `Release`) using `dpkg-scanpackages --multiversion`, validates it through APT, and deploys it to GitHub Pages. Failed builds or validation do not replace the previously published site.
 
 Enable **GitHub Pages → Build and deployment → Source: GitHub Actions** in repository settings. Once deployed, configure APT with:
 
