@@ -28,6 +28,9 @@ class DetectChangesTests(unittest.TestCase):
     def test_build_workflow(self):
         self.assertEqual(detect([".github/workflows/build.yml"], self.root), ["gnome-calendar", "nemo"])
 
+    def test_publish_workflow(self):
+        self.assertEqual(detect([".github/workflows/publish.yml"], self.root), ["gnome-calendar", "nemo"])
+
     def test_unrelated(self):
         self.assertEqual(detect(["README.md", ".github/dependabot.yml"], self.root), [])
 
