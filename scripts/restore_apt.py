@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Download and verify the previously published flat APT repository."""
 import argparse
+import time
 import gzip
 import hashlib
 from pathlib import Path, PurePosixPath
@@ -10,10 +11,18 @@ import urllib.request
 
 
 def fetch(url):
-    with urllib.request.urlopen(url, timeout=60) as response:
-        if response.status != 200:
-            raise RuntimeError(f"Unexpected HTTP status {response.status}: {url}")
-        return response.read()
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"Unexpected HTTP status {response.status}: {url}")
+                return response.read()
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as error:
+            if isinstance(error, urllib.error.HTTPError) and error.code not in (429, 500, 502, 503, 504):
+                raise
+            if attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def records(index):
