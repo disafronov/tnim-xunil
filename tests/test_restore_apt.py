@@ -136,8 +136,9 @@ class RestoreAptTests(unittest.TestCase):
         )
         sha = "a" * 40
         with tempfile.TemporaryDirectory() as tmp:
-            with patch("scripts.restore_apt.verify_index"), patch("scripts.restore_apt.fetch", side_effect=[gzip.compress(record.encode()), b"signed", payload, sha.encode()]):
+            with patch("scripts.restore_apt.verify_index"), patch("scripts.restore_apt.fetch", side_effect=[gzip.compress(record.encode()), b"signed", payload, sha.encode()]) as fetch_mock:
                 self.assertEqual(restore("https://example.org/repo/", Path(tmp), public_key=Path("key.asc")), sha)
+                self.assertEqual(fetch_mock.call_args_list[-1], unittest.mock.call("https://example.org/repo/published-commit"))
                 self.assertEqual((Path(tmp) / "pool/sample.deb").read_bytes(), payload)
 
     def test_rejects_traversal(self):
