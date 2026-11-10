@@ -58,7 +58,7 @@ class RestoreAptTests(unittest.TestCase):
                 HTTPError("url", 503, "Unavailable", {}, None),
             ]):
                 with self.assertRaises(HTTPError):
-                    restore("https://example.org/repo/", Path(tmp))
+                    restore("https://example.org/repo/", Path(tmp), public_key=Path("key.asc"))
 
     def test_existing_archive_requires_public_key(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -86,9 +86,9 @@ class RestoreAptTests(unittest.TestCase):
         index = gzip.compress(b"package list")
         digest = hashlib.sha256(index).hexdigest()
         release = (
-            "-----BEGIN PGP SIGNED MESSAGE-----\\nHash: SHA256\\n\\n"
-            f"SHA256:\\n {digest} {len(index)} Packages.gz\\n"
-            "-----BEGIN PGP SIGNATURE-----\\nsignature\\n-----END PGP SIGNATURE-----\\n"
+            "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\n"
+            f"SHA256:\n {digest} {len(index)} Packages.gz\n"
+            "-----BEGIN PGP SIGNATURE-----\nsignature\n-----END PGP SIGNATURE-----\n"
         ).encode()
         with patch("scripts.restore_apt.subprocess.run"):
             verify_index(index, release, Path("key.asc"))
@@ -137,7 +137,7 @@ class RestoreAptTests(unittest.TestCase):
         sha = "a" * 40
         with tempfile.TemporaryDirectory() as tmp:
             with patch("scripts.restore_apt.verify_index"), patch("scripts.restore_apt.fetch", side_effect=[gzip.compress(record.encode()), b"signed", payload, sha.encode()]):
-                self.assertEqual(restore("https://example.org/repo/", Path(tmp)), sha)
+                self.assertEqual(restore("https://example.org/repo/", Path(tmp), public_key=Path("key.asc")), sha)
                 self.assertEqual((Path(tmp) / "pool/sample.deb").read_bytes(), payload)
 
     def test_rejects_traversal(self):
