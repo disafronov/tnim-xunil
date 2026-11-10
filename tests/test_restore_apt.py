@@ -56,6 +56,32 @@ class RestoreAptTests(unittest.TestCase):
                 with self.assertRaises(HTTPError):
                     restore("https://example.org/repo/", Path(tmp))
 
+    def test_transient_http_error_retries(self):
+        with patch("scripts.restore_apt.urllib.request.urlopen", side_effect=[
+            HTTPError("url", 503, "Unavailable", {}, None),
+            unittest.mock.MagicMock(__enter__=unittest.mock.Mock(return_value=unittest.mock.Mock(status=200, read=lambda: b"ok"))),
+        ]) as urlopen, patch("scripts.restore_apt.time.sleep") as sleep:
+            from scripts.restore_apt import fetch
+            self.assertEqual(fetch("https://example.org/repo/Packages.gz"), b"ok")
+            self.assertEqual(urlopen.call_count, 2)
+            sleep.assert_called_once_with(1)
+
+    def test_non_retryable_http_error_is_immediate(self):
+        with patch("scripts.restore_apt.urllib.request.urlopen", side_effect=HTTPError("url", 404, "Not Found", {}, None)) as urlopen, patch("scripts.restore_apt.time.sleep") as sleep:
+            from scripts.restore_apt import fetch
+            with self.assertRaises(HTTPError):
+                fetch("https://example.org/repo/Packages.gz")
+            urlopen.assert_called_once()
+            sleep.assert_not_called()
+
+    def test_transient_http_error_exhausts_retries(self):
+        with patch("scripts.restore_apt.urllib.request.urlopen", side_effect=HTTPError("url", 503, "Unavailable", {}, None)) as urlopen, patch("scripts.restore_apt.time.sleep") as sleep:
+            from scripts.restore_apt import fetch
+            with self.assertRaises(HTTPError):
+                fetch("https://example.org/repo/Packages.gz")
+            self.assertEqual(urlopen.call_count, 3)
+            self.assertEqual(sleep.call_args_list, [unittest.mock.call(1), unittest.mock.call(2)])
+
     def test_checksum_mismatch_is_fatal(self):
         record = "Package: sample\nFilename: pool/sample.deb\nSize: 3\nSHA256: " + "0" * 64 + "\n"
         with tempfile.TemporaryDirectory() as tmp:
