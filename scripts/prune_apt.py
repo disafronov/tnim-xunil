@@ -13,7 +13,7 @@ def fields(path):
             ["dpkg-deb", "--field", str(path), field],
             text=True,
         ).strip()
-        if not value or "\\n" in value:
+        if not value or "\n" in value:
             raise ValueError(f"Invalid {field} metadata: {path}")
         values.append(value)
     return tuple(values)
