@@ -85,15 +85,28 @@ class RestoreAptTests(unittest.TestCase):
     def test_signed_index_checksum_validation(self):
         index = gzip.compress(b"package list")
         digest = hashlib.sha256(index).hexdigest()
-        release = (
-            "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\n"
-            f"SHA256:\n {digest} {len(index)} Packages.gz\n"
-            "-----BEGIN PGP SIGNATURE-----\nsignature\n-----END PGP SIGNATURE-----\n"
-        ).encode()
-        with patch("scripts.restore_apt.subprocess.run"):
-            verify_index(index, release, Path("key.asc"))
+        release = f"SHA256:\\n {digest} {len(index)} Packages.gz\\n".encode()
+
+        def verified_release(command, **kwargs):
+            output = Path(command[command.index("--output") + 1])
+            output.write_bytes(release)
+
+        with patch("scripts.restore_apt.subprocess.run", side_effect=verified_release) as run:
+            verify_index(index, b"opaque signed data", Path("key.asc"))
+            self.assertIn("--output", run.call_args.args[0])
             with self.assertRaisesRegex(ValueError, "does not match"):
-                verify_index(b"tampered", release, Path("key.asc"))
+                verify_index(b"tampered", b"opaque signed data", Path("key.asc"))
+
+    def test_signed_release_uses_verified_output_not_armored_input(self):
+        index = gzip.compress(b"package list")
+        digest = hashlib.sha256(index).hexdigest()
+        release = f"SHA256:\\n {digest} {len(index)} Packages.gz\\n".encode()
+
+        def verified_release(command, **kwargs):
+            Path(command[command.index("--output") + 1]).write_bytes(release)
+
+        with patch("scripts.restore_apt.subprocess.run", side_effect=verified_release):
+            verify_index(index, b"not a parseable clearsigned message", Path("key.asc"))
 
     def test_transient_http_error_retries(self):
         with patch("scripts.restore_apt.urllib.request.urlopen", side_effect=[
