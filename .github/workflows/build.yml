@@ -55,6 +55,22 @@ jobs:
               print(f"has_packages={'true' if packages else 'false'}", file=output)
           print(f"Selected packages: {packages}")
           PY
+      - name: Configure APT package archive
+        if: steps.packages.outputs.has_packages == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/apt-archives/partial"
+          printf 'Dir::Cache::archives "%s";\nAPT::Keep-Downloaded-Packages "true";\n' \
+            "$RUNNER_TEMP/apt-archives" | sudo tee /etc/apt/apt.conf.d/99-ci-package-cache > /dev/null
+      - name: Restore APT downloads
+        if: steps.packages.outputs.has_packages == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives/*.deb
+          key: apt-ubuntu-24.04-${{ github.sha }}
+          restore-keys: |
+            apt-ubuntu-24.04-
       - name: Install Debian packaging tools
         if: steps.packages.outputs.has_packages == 'true'
         run: |
