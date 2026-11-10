@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -35,7 +39,8 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          git diff --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/changed-files"
+          merge_base="$(git merge-base "$BASE_SHA" HEAD)"
+          git diff --name-only "$merge_base" HEAD > "$RUNNER_TEMP/changed-files"
           matrix="$(python3 scripts/detect_changes.py --changed-files "$RUNNER_TEMP/changed-files")"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "Selected packages: $matrix"
@@ -50,6 +55,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Install Debian packaging tools
         run: |
           sudo apt-get update
