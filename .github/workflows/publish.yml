@@ -56,7 +56,19 @@ jobs:
           cd "$repo"
           dpkg-scanpackages pool /dev/null > Packages
           gzip -n -9 -c Packages > Packages.gz
-          apt-ftparchive release . > Release
+          apt-ftparchive \
+            -o 'APT::FTPArchive::Release::Origin=tnim-xunil' \
+            -o "APT::FTPArchive::Release::Label=Dmitrii Safronov's Patched Packages" \
+            -o 'APT::FTPArchive::Release::Suite=zena' \
+            -o 'APT::FTPArchive::Release::Codename=zena' \
+            -o 'APT::FTPArchive::Release::Version=22.3' \
+            -o 'APT::FTPArchive::Release::Description=Personal fixes for upstream bugs and annoyances' \
+            release . > Release
+          grep -Fxq 'Origin: tnim-xunil' Release
+          grep -Fxq 'Suite: zena' Release
+          grep -Fxq 'Codename: zena' Release
+          grep -Fxq 'Version: 22.3' Release
+          grep -Fxq 'Description: Personal fixes for upstream bugs and annoyances' Release
           touch .nojekyll
           test -s Packages.gz
           test -s Release
