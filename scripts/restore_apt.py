@@ -37,10 +37,14 @@ def verify_index(index, inrelease, public_key):
             check=True,
         )
         signed.write_bytes(inrelease)
-        subprocess.run(["gpgv", "--keyring", str(keyring), str(signed)], check=True)
+        verified = directory / "Release"
+        subprocess.run(
+            ["gpgv", "--keyring", str(keyring), "--output", str(verified), str(signed)],
+            check=True,
+        )
+        release = verified.read_bytes()
 
-    # Read the cleartext-signed Release fields, including the SHA256 table.
-    release = inrelease.split(b"\n\n", 1)[1].split(b"\n-----BEGIN PGP SIGNATURE-----", 1)[0]
+    # Read SHA256 metadata from the content verified by gpgv.
     lines = release.decode("utf-8").splitlines()
     digest = hashlib.sha256(index).hexdigest()
     matches = []
