@@ -83,7 +83,11 @@ jobs:
           set -euo pipefail
           if [[ -z "$PUBLISHED_SHA" ]]; then
             # One-time migration: existing archive predates the state marker.
-            find packages -mindepth 2 -maxdepth 2 -name package.yaml -printf '%h\n' | sort > "$RUNNER_TEMP/rebuild"
+            if [[ -d packages ]]; then
+              find packages -mindepth 2 -maxdepth 2 -name package.yaml -printf '%h\n' | sort > "$RUNNER_TEMP/rebuild"
+            else
+              : > "$RUNNER_TEMP/rebuild"
+            fi
           else
             git cat-file -e "$PUBLISHED_SHA^{commit}"
             git merge-base --is-ancestor "$PUBLISHED_SHA" HEAD
