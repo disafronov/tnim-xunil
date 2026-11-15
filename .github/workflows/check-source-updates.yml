@@ -1,0 +1,66 @@
+name: Check Linux Mint source updates
+
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: check-source-updates
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    container:
+      image: linuxmintd/mint22.3-amd64:latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install tools and refresh source indices
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends python3-yaml git gh
+      - name: Check source packages
+        run: |
+          set -euo pipefail
+          for manifest in packages/*/package.yaml; do
+            python3 scripts/check_source_updates.py "$manifest"
+          done
+      - name: Create update pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for manifest in packages/*/package.yaml; do
+            if git diff --quiet -- "$manifest"; then
+              continue
+            fi
+            package="$(basename "$(dirname "$manifest")")"
+            branch="update/$package"
+            version="$(python3 -c 'import sys,yaml; print(yaml.safe_load(open(sys.argv[1]))["source"]["version"])' "$manifest")"
+            git switch -c "$branch"
+            git add -- "$manifest"
+            git commit -m "chore: update $package source to $version"
+            # Do not overwrite an existing update branch or its pending review.
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+              echo "Update branch $branch already exists; leaving it untouched"
+            else
+              git push origin "$branch"
+              gh pr create --base main --head "$branch" \
+                --title "chore: update $package source to $version" \
+                --body "Linux Mint published a newer source package. CI will verify that the local patches still apply and the package builds. No automatic merge."
+            fi
+            git switch --detach "$GITHUB_SHA"
+          done
